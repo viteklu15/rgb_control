@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -16,26 +17,73 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   bool _isOn = false;
   bool _policeMode = false;
   bool _autoColorMode = false;
+  int _brightness = 10; // 0..10
 
   final _ble = BleManager.instance;
+
+  // ---- автопереподключение ----
+  Timer? _reconnectTimer;
+  int _reconnectAttempt = 0;
+  static const int _reconnectMaxDelaySec = 30;
+  StreamSubscription? _statusSub;
 
   @override
   void initState() {
     super.initState();
     _ble.ensureInitialized();
     _ble.autoConnectToBest('RGB_CONTROL_L');
-    _ble.statusStream.listen((_) {
+
+    _statusSub = _ble.statusStream.listen((_) {
       if (!mounted) return;
+      final connected = _ble.isConnected;
+
       setState(() {
-        if (!_ble.isConnected) {
+        if (!connected) {
+          // При разрыве связи локально выключаем питание и режимы
+          _isOn = false;
           _policeMode = false;
           _autoColorMode = false;
         }
       });
+
+      if (connected) {
+        _cancelReconnect();
+      } else {
+        _scheduleReconnect();
+      }
     });
   }
 
-  void _togglePower() {
+  void _scheduleReconnect() {
+    // Уже запланировано — выходим
+    if (_reconnectTimer?.isActive ?? false) return;
+
+    final exp = (_reconnectAttempt.clamp(0, 10) as int);
+    final delaySec = min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
+    _reconnectAttempt++;
+
+    _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
+      if (!_ble.isConnected) {
+        await _ble.autoConnectToBest('RGB_CONTROL_L');
+        // Дальнейшее планирование произойдёт из statusStream при неуспехе
+      }
+    });
+  }
+
+  void _cancelReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectAttempt = 0;
+  }
+
+  @override
+  void dispose() {
+    _cancelReconnect();
+    _statusSub?.cancel();
+    super.dispose();
+  }
+
+  void _togglePower() async {
     setState(() {
       _isOn = !_isOn;
       if (!_isOn) {
@@ -43,7 +91,12 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
         _autoColorMode = false;
       }
     });
-    RgbService.onPowerToggled(_isOn, current: _currentColor);
+    if (_ble.isConnected) {
+      await RgbService.onPowerToggled(_isOn, current: _currentColor);
+      // if (_isOn) {
+      //   await RgbService.onBrightnessChanged(_brightness, withResponse: false);
+      // }
+    }
   }
 
   void _togglePoliceMode(bool value) {
@@ -51,7 +104,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
       _policeMode = value;
       if (value) _autoColorMode = false;
     });
-    RgbService.onPoliceMode(value);
+    if (_ble.isConnected) RgbService.onPoliceMode(value);
   }
 
   void _toggleAutoColorMode(bool value) {
@@ -59,7 +112,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
       _autoColorMode = value;
       if (value) _policeMode = false;
     });
-    RgbService.onAutoColor(value);
+    if (_ble.isConnected) RgbService.onAutoColor(value);
   }
 
   @override
@@ -71,6 +124,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     final thumbSize = ringSize * 0.1;
 
     final connected = _ble.isConnected;
+    final powerEnabled = connected; // кнопка питания активна только при подключении
 
     return Scaffold(
       body: Stack(
@@ -109,39 +163,141 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircleColorPicker(
-                          size: Size(ringSize, ringSize),
-                          strokeWidth: ringStroke,
-                          thumbSize: thumbSize,
-                          initialColor: _currentColor,
-                          enabled: _isOn && connected,
-                          onChanged: (c) {
-                            setState(() => _currentColor = c);
-                            RgbService.onColorChanged(c, isOn: _isOn);
-                          },
-                          center: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: _isOn
-                                  ? [BoxShadow(color: Colors.greenAccent.withOpacity(0.45), blurRadius: 32, spreadRadius: 2)]
-                                  : [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 10, spreadRadius: 1)],
-                            ),
-                            child: RawMaterialButton(
-                              onPressed: connected ? _togglePower : null,
-                              elevation: 0,
-                              fillColor: _isOn ? const Color(0xFF11C56B) : Colors.white.withOpacity(0.9),
-                              shape: const CircleBorder(),
-                              constraints: const BoxConstraints.tightFor(width: 122, height: 122),
-                              child: Icon(
-                                Icons.power_settings_new_rounded,
-                                size: 44,
-                                color: _isOn ? Colors.white : Colors.grey[700],
+                        // Кольцевой цветовой пикер + кнопка питания
+                        Transform.translate(
+                          offset: Offset(0, -h * 0.04),
+                          child: CircleColorPicker(
+                            size: Size(ringSize, ringSize),
+                            strokeWidth: ringStroke,
+                            thumbSize: thumbSize,
+                            initialColor: _currentColor,
+                            enabled: _isOn && connected,
+                            onChanged: (c) {
+                              setState(() => _currentColor = c);
+                              if (connected) {
+                                RgbService.onColorChanged(c, isOn: _isOn);
+                              }
+                            },
+                            center: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: (_isOn && powerEnabled)
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.greenAccent.withOpacity(0.45),
+                                          blurRadius: 32,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.25),
+                                          blurRadius: 10,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                              ),
+                              child: Opacity(
+                                opacity: powerEnabled ? 1.0 : 0.55,
+                                child: RawMaterialButton(
+                                  onPressed: powerEnabled ? _togglePower : null,
+                                  elevation: 0,
+                                  fillColor: _isOn && powerEnabled
+                                      ? const Color(0xFF11C56B)
+                                      : Colors.white.withOpacity(powerEnabled ? 0.9 : 0.35),
+                                  shape: const CircleBorder(),
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 122,
+                                    height: 122,
+                                  ),
+                                  child: Icon(
+                                    Icons.power_settings_new_rounded,
+                                    size: 44,
+                                    color: _isOn && powerEnabled
+                                        ? Colors.white
+                                        : (powerEnabled ? Colors.grey[700] : Colors.grey[500]),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
+
+                        // Слайдер яркости
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: BackdropFilter(
+                                  filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.wb_sunny_rounded,
+                                              size: 18,
+                                              color: (_isOn && connected) ? Colors.white : Colors.white38,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Яркость: $_brightness',
+                                              style: TextStyle(
+                                                color: (_isOn && connected) ? Colors.white : Colors.white38,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        SliderTheme(
+                                          data: SliderTheme.of(context).copyWith(
+                                            activeTrackColor: Colors.lightBlueAccent,
+                                            inactiveTrackColor: Colors.white24,
+                                            thumbColor: Colors.lightBlueAccent,
+                                            overlayColor: Colors.lightBlueAccent.withOpacity(0.2),
+                                            trackHeight: 6,
+                                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                                          ),
+                                          child: Slider(
+                                            min: 0,
+                                            max: 10,
+                                            divisions: 10,
+                                            value: _brightness.toDouble(),
+                                            onChanged: (_isOn && connected)
+                                                ? (v) {
+                                                    final b = v.round();
+                                                    setState(() => _brightness = b);
+                                                    RgbService.onBrightnessChanged(b, withResponse: false);
+                                                  }
+                                                : null,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // Плитка режимов
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: ClipRRect(
@@ -195,7 +351,9 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
       height: h,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [c.withOpacity(opacity), Colors.transparent]),
+        gradient: RadialGradient(
+          colors: [c.withOpacity(opacity), Colors.transparent],
+        ),
       ),
     );
   }
@@ -210,13 +368,20 @@ class _ConnectionIndicator extends StatefulWidget {
 
 class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
   final _ble = BleManager.instance;
+  StreamSubscription? _sub;
 
   @override
   void initState() {
     super.initState();
-    _ble.statusStream.listen((_) {
+    _sub = _ble.statusStream.listen((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -237,21 +402,27 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
       ),
       child: Row(
         children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _ble.isConnected ? ('Подключено') : 'Поиск устройства',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              _ble.isConnected ? 'Подключено' : 'Поиск устройства',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           if (_ble.lastRssi != null)
-            // Text('RSSI ${_ble.lastRssi} dBm', style: TextStyle(color: Colors.white.withOpacity(0.8))),
-          IconButton(
-            onPressed: () => _ble.autoConnectToBest('RGB_CONTROL_L'),
-            icon: const Icon(Icons.sync, color: Colors.white),
-            tooltip: 'Переподключиться',
-          ),
+            IconButton(
+              onPressed: () => _ble.autoConnectToBest('RGB_CONTROL_L'),
+              icon: const Icon(Icons.sync, color: Colors.white),
+              tooltip: 'Переподключиться',
+            ),
         ],
       ),
     );
@@ -292,10 +463,7 @@ class _GlassSwitchTile extends StatelessWidget {
       inactiveTrackColor: Colors.white24,
     );
 
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.5,
-      child: tile,
-    );
+    return Opacity(opacity: enabled ? 1.0 : 0.5, child: tile);
   }
 }
 
@@ -333,17 +501,29 @@ class CircleColorPicker extends StatefulWidget {
   State<CircleColorPicker> createState() => _CircleColorPickerState();
 }
 
-class _CircleColorPickerState extends State<CircleColorPicker> with TickerProviderStateMixin {
+class _CircleColorPickerState extends State<CircleColorPicker>
+    with TickerProviderStateMixin {
   late final AnimationController _lightnessController;
   late final AnimationController _hueDegController;
 
-  Color get _color => HSLColor.fromAHSL(1, _hueDegController.value, 1, _lightnessController.value).toColor();
+  Color get _color =>
+      HSLColor.fromAHSL(1, _hueDegController.value, 1, _lightnessController.value).toColor();
 
   @override
   void initState() {
     super.initState();
-    _hueDegController = AnimationController(vsync: this, value: widget.initialHue, lowerBound: 0, upperBound: 360)..addListener(_notify);
-    _lightnessController = AnimationController(vsync: this, value: widget.initialLightness, lowerBound: 0, upperBound: 1)..addListener(_notify);
+    _hueDegController = AnimationController(
+      vsync: this,
+      value: widget.initialHue,
+      lowerBound: 0,
+      upperBound: 360,
+    )..addListener(_notify);
+    _lightnessController = AnimationController(
+      vsync: this,
+      value: widget.initialLightness,
+      lowerBound: 0,
+      upperBound: 1,
+    )..addListener(_notify);
   }
 
   void _notify() => widget.onChanged(_color);
@@ -410,9 +590,19 @@ class _HuePickerState extends State<_HuePicker> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _radiansController = AnimationController(vsync: this, value: widget.initialHueDeg * pi / 180, lowerBound: 0, upperBound: 2 * pi)
-      ..addListener(() => widget.onRadiansChanged(_radiansController.value));
-    _scaleController = AnimationController(vsync: this, value: 1, lowerBound: .9, upperBound: 1, duration: const Duration(milliseconds: 50));
+    _radiansController = AnimationController(
+      vsync: this,
+      value: widget.initialHueDeg * pi / 180,
+      lowerBound: 0,
+      upperBound: 2 * pi,
+    )..addListener(() => widget.onRadiansChanged(_radiansController.value));
+    _scaleController = AnimationController(
+      vsync: this,
+      value: 1,
+      lowerBound: .9,
+      upperBound: 1,
+      duration: const Duration(milliseconds: 50),
+    );
   }
 
   @override
@@ -438,7 +628,10 @@ class _HuePickerState extends State<_HuePicker> with TickerProviderStateMixin {
     return IgnorePointer(
       ignoring: !widget.enabled,
       child: GestureDetector(
-        onPanStart: (d) { _scaleController.reverse(); _updateFromPos(d.localPosition); },
+        onPanStart: (d) {
+          _scaleController.reverse();
+          _updateFromPos(d.localPosition);
+        },
         onPanUpdate: (d) => _updateFromPos(d.localPosition),
         onPanEnd: (_) => _scaleController.forward(),
         child: SizedBox(
