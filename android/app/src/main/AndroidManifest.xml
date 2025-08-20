@@ -1,44 +1,55 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 👇 ДОБАВЛЯЕМ РАЗРЕШЕНИЯ -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- BLE и сети -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+
+    <!-- Android 12+ -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Для Android ≤ 11 (с обратной совместимостью) -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- Интернет (если используешь логи/запросы) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="RGB_CONTROL"
         android:name="${applicationName}"
+        android:label="RGB Go"
         android:icon="@mipmap/ic_launcher">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme" />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT" />
-            <data android:mimeType="text/plain" />
-        </intent>
-    </queries>
 </manifest>

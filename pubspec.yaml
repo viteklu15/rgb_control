@@ -1,11 +1,12 @@
 name: rgb_control
 description: "A new Flutter project."
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.7.2
+  sdk: '>=3.7.2 <4.0.0'  # Добавлено ограничение верхней версии
+
 dependencies:
   flutter:
     sdk: flutter
@@ -19,12 +20,20 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1  # Убраны кавычки
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  # adaptive_icon_background: "#FFFFFF"
+  # adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  min_sdk_android: 21
 
 flutter:
-
-
   uses-material-design: true
-
-
+  
+  # Рекомендую добавить секцию assets для иконок
+  assets:
+    - assets/icon/icon.png
