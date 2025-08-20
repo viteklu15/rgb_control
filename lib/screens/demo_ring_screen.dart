@@ -55,7 +55,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   }
 
   void _scheduleReconnect() {
-    // Уже запланировано — выходим
     if (_reconnectTimer?.isActive ?? false) return;
 
     final exp = (_reconnectAttempt.clamp(0, 10) as int);
@@ -65,7 +64,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
         await _ble.autoConnectToBest('RGB_CONTROL_L');
-        // Дальнейшее планирование произойдёт из statusStream при неуспехе
       }
     });
   }
@@ -394,9 +392,11 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
     final state = _ble.connectionState;
     final scanning = _ble.isScanning;
     final busy = scanning || state == DeviceConnectionState.connecting;
-    final dotColor = switch (state) {
+
+    final Color dotColor = switch (state) {
       DeviceConnectionState.connected => Colors.green,
-      _ => Colors.orange,
+      DeviceConnectionState.connecting => Colors.orange,
+      _ => busy ? Colors.orange : Colors.red,
     };
 
     final Widget dotWidget;
@@ -427,9 +427,13 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
       dotWidget = Container(
         width: 10,
         height: 10,
-        decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
       );
     }
+
+    final String label = _ble.isConnected
+        ? 'Подключено'
+        : (busy ? 'Подключение…' : 'Поиск устройства');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -445,11 +449,7 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _ble.isConnected
-                  ? 'Подключено'
-                  : (state == DeviceConnectionState.connecting
-                      ? 'Подключение…'
-                      : 'Поиск устройства'),
+              label,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
