@@ -386,11 +386,45 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
 
   @override
   Widget build(BuildContext context) {
-    final dot = switch (_ble.connectionState) {
+    final state = _ble.connectionState;
+    final dotColor = switch (state) {
       DeviceConnectionState.connected => Colors.green,
       DeviceConnectionState.connecting => Colors.orange,
       _ => Colors.red,
     };
+
+    final Widget dotWidget;
+    if (state == DeviceConnectionState.connecting) {
+      dotWidget = SizedBox(
+        width: 16,
+        height: 16,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration:
+                  const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+            ),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      dotWidget = Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -402,11 +436,7 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-          ),
+          dotWidget,
           const SizedBox(width: 10),
           Expanded(
             child: Text(
