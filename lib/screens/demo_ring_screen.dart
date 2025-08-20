@@ -369,6 +369,7 @@ class _ConnectionIndicator extends StatefulWidget {
 class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
   final _ble = BleManager.instance;
   StreamSubscription? _sub;
+  StreamSubscription? _scanSub;
 
   @override
   void initState() {
@@ -376,21 +377,59 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
     _sub = _ble.statusStream.listen((_) {
       if (mounted) setState(() {});
     });
+    _scanSub = _ble.scanningStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _scanSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final dot = switch (_ble.connectionState) {
+    final state = _ble.connectionState;
+    final scanning = _ble.isScanning;
+    final busy = scanning || state == DeviceConnectionState.connecting;
+    final dotColor = switch (state) {
       DeviceConnectionState.connected => Colors.green,
-      DeviceConnectionState.connecting => Colors.orange,
-      _ => Colors.red,
+      _ => Colors.orange,
     };
+
+    final Widget dotWidget;
+    if (busy) {
+      dotWidget = SizedBox(
+        width: 16,
+        height: 16,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+            ),
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(dotColor),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      dotWidget = Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -402,15 +441,15 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-          ),
+          dotWidget,
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _ble.isConnected ? 'Подключено' : 'Поиск устройства',
+              _ble.isConnected
+                  ? 'Подключено'
+                  : (state == DeviceConnectionState.connecting
+                      ? 'Подключение…'
+                      : 'Поиск устройства'),
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
