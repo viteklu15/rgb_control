@@ -55,7 +55,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   }
 
   void _scheduleReconnect() {
-    // Уже запланировано — выходим
     if (_reconnectTimer?.isActive ?? false) return;
 
     final exp = (_reconnectAttempt.clamp(0, 10) as int);
@@ -65,7 +64,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
         await _ble.autoConnectToBest('RGB_CONTROL_L');
-        // Дальнейшее планирование произойдёт из statusStream при неуспехе
       }
     });
   }
@@ -369,6 +367,7 @@ class _ConnectionIndicator extends StatefulWidget {
 class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
   final _ble = BleManager.instance;
   StreamSubscription? _sub;
+  StreamSubscription? _scanSub;
 
   @override
   void initState() {
@@ -376,25 +375,32 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
     _sub = _ble.statusStream.listen((_) {
       if (mounted) setState(() {});
     });
+    _scanSub = _ble.scanningStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _scanSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = _ble.connectionState;
-    final dotColor = switch (state) {
+    final scanning = _ble.isScanning;
+    final busy = scanning || state == DeviceConnectionState.connecting;
+
+    final Color dotColor = switch (state) {
       DeviceConnectionState.connected => Colors.green,
       DeviceConnectionState.connecting => Colors.orange,
-      _ => Colors.red,
+      _ => busy ? Colors.orange : Colors.red,
     };
 
     final Widget dotWidget;
-    if (state == DeviceConnectionState.connecting) {
+    if (busy) {
       dotWidget = SizedBox(
         width: 16,
         height: 16,
@@ -404,15 +410,14 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
             Container(
               width: 10,
               height: 10,
-              decoration:
-                  const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
             ),
-            const SizedBox(
+            SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
                 strokeWidth: 1.5,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                valueColor: AlwaysStoppedAnimation<Color>(dotColor),
               ),
             ),
           ],
@@ -425,6 +430,10 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
         decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
       );
     }
+
+    final String label = _ble.isConnected
+        ? 'Подключено'
+        : (busy ? 'Подключение…' : 'Поиск устройства');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -440,7 +449,7 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _ble.isConnected ? 'Подключено' : 'Поиск устройства',
+              label,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,

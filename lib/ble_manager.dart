@@ -20,10 +20,15 @@ class BleManager {
 
   final StreamController<DeviceConnectionState> _stateCtrl =
       StreamController<DeviceConnectionState>.broadcast();
+  final StreamController<bool> _scanCtrl =
+      StreamController<bool>.broadcast();
+  bool _scanning = false;
 
   Stream<DeviceConnectionState> get statusStream => _stateCtrl.stream;
+  Stream<bool> get scanningStream => _scanCtrl.stream;
   DeviceConnectionState get connectionState => _connState.value;
   bool get isConnected => _connState.value == DeviceConnectionState.connected;
+  bool get isScanning => _scanning;
   String get humanStatus => switch (_connState.value) {
         DeviceConnectionState.connected => 'Подключено',
         DeviceConnectionState.connecting => 'Подключение…',
@@ -76,6 +81,7 @@ class BleManager {
       {Duration scanDuration = const Duration(seconds: 6)}) async {
     await disconnect();
 
+    _setScanning(true);
     DiscoveredDevice? best;
     _scanSub?.cancel();
     _scanSub = _ble
@@ -94,6 +100,7 @@ class BleManager {
 
     await Future.delayed(scanDuration);
     await _scanSub?.cancel();
+    _setScanning(false);
 
     if (best == null) {
       _lastRssi.value = null;
@@ -124,6 +131,7 @@ class BleManager {
     await _connSub?.cancel();
     _scanSub = null;
     _connSub = null;
+    _setScanning(false);
     _update(DeviceConnectionState.disconnected);
   }
 
@@ -154,7 +162,15 @@ class BleManager {
     }
   }
 
+  void _setScanning(bool s) {
+    if (_scanning != s) {
+      _scanning = s;
+      if (!_scanCtrl.isClosed) _scanCtrl.add(s);
+    }
+  }
+
   void dispose() {
     _stateCtrl.close();
+    _scanCtrl.close();
   }
 }
