@@ -57,16 +57,9 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   void _scheduleReconnect() {
     if (_reconnectTimer?.isActive ?? false) return;
 
-    final attempt = _reconnectAttempt++;
-    if (attempt == 0) {
-      // Первое переподключение выполняем сразу, чтобы индикатор появился немедленно
-      unawaited(_ble.autoConnectToBest('RGB_CONTROL_L'));
-      return;
-    }
-
-    final exp = ((attempt - 1).clamp(0, 10) as int);
-    final delaySec =
-        min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
+    final exp = (_reconnectAttempt.clamp(0, 10) as int);
+    final delaySec = min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
+    _reconnectAttempt++;
 
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
