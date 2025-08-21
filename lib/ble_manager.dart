@@ -59,7 +59,7 @@ class BleManager {
   Future<void> _init() async {
     await _ensurePermissions();
     _prefs = await SharedPreferences.getInstance();
-    _initialized = true; // <-- финальный флаг и источник конфликта
+    _initialized = true;
   }
 
   Future<void> _ensurePermissions() async {
@@ -95,24 +95,31 @@ class BleManager {
     await ensureInitialized();
     await disconnect();
 
-    if (!forceScan) {
-      final savedId = _prefs?.getString(_savedIdKey);
-      if (savedId != null) {
-        _lastRssi.value = null;
-        _deviceName.value = targetName;
-        _deviceId.value = savedId;
-        await _connSub?.cancel();
-        _update(DeviceConnectionState.connecting);
+    if (forceScan) {
+      // Пользователь запросил переподключение — забываем сохранённое устройство.
+      await _prefs?.remove(_savedIdKey);
+      _deviceId.value = null;
+      _deviceName.value = null;
+      _lastRssi.value = null;
+    }
 
-        _connSub = _ble
-            .connectToDevice(id: savedId, servicesWithCharacteristicsToDiscover: {})
-            .listen((u) {
-          _update(u.connectionState);
-        }, onError: (_) {
-          _update(DeviceConnectionState.disconnected);
-        });
-        return;
-      }
+    // Пытаемся быстро подключиться к сохранённому устройству, если оно есть и forceScan == false.
+    final savedId = (!forceScan) ? _prefs?.getString(_savedIdKey) : null;
+    if (savedId != null) {
+      _lastRssi.value = null;
+      _deviceName.value = targetName;
+      _deviceId.value = savedId;
+      await _connSub?.cancel();
+      _update(DeviceConnectionState.connecting);
+
+      _connSub = _ble
+          .connectToDevice(id: savedId, servicesWithCharacteristicsToDiscover: {})
+          .listen((u) {
+        _update(u.connectionState);
+      }, onError: (_) {
+        _update(DeviceConnectionState.disconnected);
+      });
+      return;
     }
 
     await autoConnectToBest(targetName);
