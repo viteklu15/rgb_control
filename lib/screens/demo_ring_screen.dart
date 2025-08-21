@@ -56,12 +56,6 @@ void initState() {
   _ble.connect('RGB_CONTROL_L'); // начинаем подключение
 }
 
-@override
-void dispose() {
-  _statusSub?.cancel();
-  _cancelReconnect();
-  super.dispose();
-}
 
 
   void _scheduleReconnect() {
