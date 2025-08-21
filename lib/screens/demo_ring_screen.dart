@@ -27,36 +27,32 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   static const int _reconnectMaxDelaySec = 30;
   StreamSubscription? _statusSub;
 
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
+    _ble.ensureInitialized();
+    _ble.autoConnectToBest('RGB_CONTROL_L');
 
-  _ble.ensureInitialized(); // инициализация BLE/разрешений при старте
+    _statusSub = _ble.statusStream.listen((_) {
+      if (!mounted) return;
+      final connected = _ble.isConnected;
 
-  _statusSub = _ble.statusStream.listen((_) {
-    if (!mounted) return;
-    final connected = _ble.isConnected;
+      setState(() {
+        if (!connected) {
+          // При разрыве связи локально выключаем питание и режимы
+          _isOn = false;
+          _policeMode = false;
+          _autoColorMode = false;
+        }
+      });
 
-    setState(() {
-      if (!connected) {
-        // При разрыве связи локально выключаем питание и режимы
-        _isOn = false;
-        _policeMode = false;
-        _autoColorMode = false;
+      if (connected) {
+        _cancelReconnect();
+      } else {
+        _scheduleReconnect();
       }
     });
-
-    if (connected) {
-      _cancelReconnect();
-    } else {
-      _scheduleReconnect();
-    }
-  });
-
-  _ble.connect('RGB_CONTROL_L'); // начинаем подключение
-}
-
-
+  }
 
   void _scheduleReconnect() {
     if (_reconnectTimer?.isActive ?? false) return;
@@ -67,7 +63,7 @@ void initState() {
 
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
-        await _ble.connect('RGB_CONTROL_L');
+        await _ble.autoConnectToBest('RGB_CONTROL_L');
       }
     });
   }
@@ -460,13 +456,12 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
               ),
             ),
           ),
-          IconButton(
-            onPressed: busy
-                ? null
-                : () => _ble.connect('RGB_CONTROL_L', forceScan: true),
-            icon: const Icon(Icons.sync, color: Colors.white),
-            tooltip: 'Переподключиться',
-          ),
+          if (_ble.lastRssi != null)
+            IconButton(
+              onPressed: () => _ble.autoConnectToBest('RGB_CONTROL_L'),
+              icon: const Icon(Icons.sync, color: Colors.white),
+              tooltip: 'Переподключиться',
+            ),
         ],
       ),
     );

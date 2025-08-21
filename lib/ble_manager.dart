@@ -1,11 +1,9 @@
-// ble_manager.dart
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Менеджер BLE: ищет по имени, выбирает лучшую по RSSI и подключается.
 class BleManager {
@@ -26,9 +24,6 @@ class BleManager {
       StreamController<bool>.broadcast();
   bool _scanning = false;
 
-  SharedPreferences? _prefs;
-  static const _savedIdKey = 'saved_device_id';
-
   Stream<DeviceConnectionState> get statusStream => _stateCtrl.stream;
   Stream<bool> get scanningStream => _scanCtrl.stream;
   DeviceConnectionState get connectionState => _connState.value;
@@ -46,20 +41,12 @@ class BleManager {
 
   StreamSubscription<DiscoveredDevice>? _scanSub;
   StreamSubscription<ConnectionStateUpdate>? _connSub;
-
   bool _initialized = false;
-  Future<void>? _initFuture;
 
   Future<void> ensureInitialized() async {
     if (_initialized) return;
-    _initFuture ??= _init();
-    await _initFuture;
-  }
-
-  Future<void> _init() async {
-    await _ensurePermissions();
-    _prefs = await SharedPreferences.getInstance();
     _initialized = true;
+    await _ensurePermissions();
   }
 
   Future<void> _ensurePermissions() async {
@@ -80,8 +67,7 @@ class BleManager {
       } else {
         final st = await Permission.locationWhenInUse.request();
         if (st != PermissionStatus.granted) {
-          throw Exception(
-              'Нет разрешения на геолокацию для BLE-сканирования (Android < 12).');
+          throw Exception('Нет разрешения на геолокацию для BLE-сканирования (Android < 12).');
         }
       }
     } else if (Platform.isIOS) {
@@ -91,47 +77,13 @@ class BleManager {
     }
   }
 
-  Future<void> connect(String targetName, {bool forceScan = false}) async {
-    await ensureInitialized();
-    await disconnect();
-
-    if (forceScan) {
-      // Пользователь запросил переподключение — забываем сохранённое устройство.
-      await _prefs?.remove(_savedIdKey);
-      _deviceId.value = null;
-      _deviceName.value = null;
-      _lastRssi.value = null;
-    }
-
-    // Пытаемся быстро подключиться к сохранённому устройству, если оно есть и forceScan == false.
-    final savedId = (!forceScan) ? _prefs?.getString(_savedIdKey) : null;
-    if (savedId != null) {
-      _lastRssi.value = null;
-      _deviceName.value = targetName;
-      _deviceId.value = savedId;
-      await _connSub?.cancel();
-      _update(DeviceConnectionState.connecting);
-
-      _connSub = _ble
-          .connectToDevice(id: savedId, servicesWithCharacteristicsToDiscover: {})
-          .listen((u) {
-        _update(u.connectionState);
-      }, onError: (_) {
-        _update(DeviceConnectionState.disconnected);
-      });
-      return;
-    }
-
-    await autoConnectToBest(targetName);
-  }
-
   Future<void> autoConnectToBest(String targetName,
       {Duration scanDuration = const Duration(seconds: 6)}) async {
     await disconnect();
 
     _setScanning(true);
     DiscoveredDevice? best;
-    await _scanSub?.cancel();
+    _scanSub?.cancel();
     _scanSub = _ble
         .scanForDevices(
           withServices: const [],
@@ -161,9 +113,8 @@ class BleManager {
     _lastRssi.value = best!.rssi;
     _deviceName.value = best!.name;
     _deviceId.value = best!.id;
-    await _prefs?.setString(_savedIdKey, best!.id);
 
-    await _connSub?.cancel();
+    _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     _connSub = _ble
@@ -191,9 +142,7 @@ class BleManager {
     bool withResponse = true,
   }) async {
     final id = connectedDeviceId;
-    if (id == null || !isConnected) {
-      throw Exception('BLE не подключен');
-    }
+    if (id == null || !isConnected) throw Exception('BLE не подключен');
     final ch = QualifiedCharacteristic(
       deviceId: id,
       serviceId: service,
