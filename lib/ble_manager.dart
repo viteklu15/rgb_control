@@ -1,3 +1,4 @@
+// ble_manager.dart
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -79,7 +80,8 @@ class BleManager {
       } else {
         final st = await Permission.locationWhenInUse.request();
         if (st != PermissionStatus.granted) {
-          throw Exception('Нет разрешения на геолокацию для BLE-сканирования (Android < 12).');
+          throw Exception(
+              'Нет разрешения на геолокацию для BLE-сканирования (Android < 12).');
         }
       }
     } else if (Platform.isIOS) {
@@ -94,29 +96,30 @@ class BleManager {
     await disconnect();
 
     if (forceScan) {
-      // Пользователь запросил переподключение, забываем сохранённое устройство.
+      // Пользователь запросил переподключение — забываем сохранённое устройство.
       await _prefs?.remove(_savedIdKey);
       _deviceId.value = null;
       _deviceName.value = null;
       _lastRssi.value = null;
-    } else {
-      final savedId = _prefs?.getString(_savedIdKey);
-      if (savedId != null) {
-        _lastRssi.value = null;
-        _deviceName.value = targetName;
-        _deviceId.value = savedId;
-        _connSub?.cancel();
-        _update(DeviceConnectionState.connecting);
+    }
 
-        _connSub = _ble
-            .connectToDevice(id: savedId, servicesWithCharacteristicsToDiscover: {})
-            .listen((u) {
-          _update(u.connectionState);
-        }, onError: (_) {
-          _update(DeviceConnectionState.disconnected);
-        });
-        return;
-      }
+    // Пытаемся быстро подключиться к сохранённому устройству, если оно есть и forceScan == false.
+    final savedId = (!forceScan) ? _prefs?.getString(_savedIdKey) : null;
+    if (savedId != null) {
+      _lastRssi.value = null;
+      _deviceName.value = targetName;
+      _deviceId.value = savedId;
+      await _connSub?.cancel();
+      _update(DeviceConnectionState.connecting);
+
+      _connSub = _ble
+          .connectToDevice(id: savedId, servicesWithCharacteristicsToDiscover: {})
+          .listen((u) {
+        _update(u.connectionState);
+      }, onError: (_) {
+        _update(DeviceConnectionState.disconnected);
+      });
+      return;
     }
 
     await autoConnectToBest(targetName);
@@ -128,7 +131,7 @@ class BleManager {
 
     _setScanning(true);
     DiscoveredDevice? best;
-    _scanSub?.cancel();
+    await _scanSub?.cancel();
     _scanSub = _ble
         .scanForDevices(
           withServices: const [],
@@ -160,7 +163,7 @@ class BleManager {
     _deviceId.value = best!.id;
     await _prefs?.setString(_savedIdKey, best!.id);
 
-    _connSub?.cancel();
+    await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     _connSub = _ble
@@ -188,7 +191,9 @@ class BleManager {
     bool withResponse = true,
   }) async {
     final id = connectedDeviceId;
-    if (id == null || !isConnected) throw Exception('BLE не подключен');
+    if (id == null || !isConnected) {
+      throw Exception('BLE не подключен');
+    }
     final ch = QualifiedCharacteristic(
       deviceId: id,
       serviceId: service,

@@ -27,31 +27,42 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   static const int _reconnectMaxDelaySec = 30;
   StreamSubscription? _statusSub;
 
-  @override
-  void initState() {
-    super.initState();
-    _ble.connect('RGB_CONTROL_L');
+@override
+void initState() {
+  super.initState();
 
-    _statusSub = _ble.statusStream.listen((_) {
-      if (!mounted) return;
-      final connected = _ble.isConnected;
+  _ble.ensureInitialized(); // инициализация BLE/разрешений при старте
 
-      setState(() {
-        if (!connected) {
-          // При разрыве связи локально выключаем питание и режимы
-          _isOn = false;
-          _policeMode = false;
-          _autoColorMode = false;
-        }
-      });
+  _statusSub = _ble.statusStream.listen((_) {
+    if (!mounted) return;
+    final connected = _ble.isConnected;
 
-      if (connected) {
-        _cancelReconnect();
-      } else {
-        _scheduleReconnect();
+    setState(() {
+      if (!connected) {
+        // При разрыве связи локально выключаем питание и режимы
+        _isOn = false;
+        _policeMode = false;
+        _autoColorMode = false;
       }
     });
-  }
+
+    if (connected) {
+      _cancelReconnect();
+    } else {
+      _scheduleReconnect();
+    }
+  });
+
+  _ble.connect('RGB_CONTROL_L'); // начинаем подключение
+}
+
+@override
+void dispose() {
+  _statusSub?.cancel();
+  _cancelReconnect();
+  super.dispose();
+}
+
 
   void _scheduleReconnect() {
     if (_reconnectTimer?.isActive ?? false) return;
