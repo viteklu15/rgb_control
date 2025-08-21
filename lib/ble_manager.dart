@@ -1,3 +1,4 @@
+// ble_manager.dart
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -45,13 +46,20 @@ class BleManager {
 
   StreamSubscription<DiscoveredDevice>? _scanSub;
   StreamSubscription<ConnectionStateUpdate>? _connSub;
+
   bool _initialized = false;
+  Future<void>? _initFuture;
 
   Future<void> ensureInitialized() async {
     if (_initialized) return;
-    _initialized = true;
+    _initFuture ??= _init();
+    await _initFuture;
+  }
+
+  Future<void> _init() async {
     await _ensurePermissions();
     _prefs = await SharedPreferences.getInstance();
+    _initialized = true; // <-- финальный флаг и источник конфликта
   }
 
   Future<void> _ensurePermissions() async {
@@ -72,7 +80,8 @@ class BleManager {
       } else {
         final st = await Permission.locationWhenInUse.request();
         if (st != PermissionStatus.granted) {
-          throw Exception('Нет разрешения на геолокацию для BLE-сканирования (Android < 12).');
+          throw Exception(
+              'Нет разрешения на геолокацию для BLE-сканирования (Android < 12).');
         }
       }
     } else if (Platform.isIOS) {
@@ -92,7 +101,7 @@ class BleManager {
         _lastRssi.value = null;
         _deviceName.value = targetName;
         _deviceId.value = savedId;
-        _connSub?.cancel();
+        await _connSub?.cancel();
         _update(DeviceConnectionState.connecting);
 
         _connSub = _ble
@@ -115,7 +124,7 @@ class BleManager {
 
     _setScanning(true);
     DiscoveredDevice? best;
-    _scanSub?.cancel();
+    await _scanSub?.cancel();
     _scanSub = _ble
         .scanForDevices(
           withServices: const [],
@@ -147,7 +156,7 @@ class BleManager {
     _deviceId.value = best!.id;
     await _prefs?.setString(_savedIdKey, best!.id);
 
-    _connSub?.cancel();
+    await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     _connSub = _ble
@@ -175,7 +184,9 @@ class BleManager {
     bool withResponse = true,
   }) async {
     final id = connectedDeviceId;
-    if (id == null || !isConnected) throw Exception('BLE не подключен');
+    if (id == null || !isConnected) {
+      throw Exception('BLE не подключен');
+    }
     final ch = QualifiedCharacteristic(
       deviceId: id,
       serviceId: service,
