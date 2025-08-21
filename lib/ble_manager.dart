@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Менеджер BLE: ищет по имени, выбирает лучшую по RSSI и подключается.
 class BleManager {
@@ -24,6 +25,9 @@ class BleManager {
       StreamController<bool>.broadcast();
   bool _scanning = false;
 
+  SharedPreferences? _prefs;
+  static const _savedIdKey = 'saved_device_id';
+
   Stream<DeviceConnectionState> get statusStream => _stateCtrl.stream;
   Stream<bool> get scanningStream => _scanCtrl.stream;
   DeviceConnectionState get connectionState => _connState.value;
@@ -41,12 +45,20 @@ class BleManager {
 
   StreamSubscription<DiscoveredDevice>? _scanSub;
   StreamSubscription<ConnectionStateUpdate>? _connSub;
+
   bool _initialized = false;
+  Future<void>? _initFuture;
 
   Future<void> ensureInitialized() async {
     if (_initialized) return;
-    _initialized = true;
+    _initFuture ??= _init();
+    await _initFuture;
+  }
+
+  Future<void> _init() async {
     await _ensurePermissions();
+    _prefs = await SharedPreferences.getInstance();
+    _initialized = true;
   }
 
   Future<void> _ensurePermissions() async {
@@ -75,6 +87,33 @@ class BleManager {
       // Явный запрос не обязателен, но можно проверить статус:
       await Permission.bluetooth.request();
     }
+  }
+
+  Future<void> connect(String targetName, {bool forceScan = false}) async {
+    await ensureInitialized();
+    await disconnect();
+
+    if (!forceScan) {
+      final savedId = _prefs?.getString(_savedIdKey);
+      if (savedId != null) {
+        _lastRssi.value = null;
+        _deviceName.value = targetName;
+        _deviceId.value = savedId;
+        _connSub?.cancel();
+        _update(DeviceConnectionState.connecting);
+
+        _connSub = _ble
+            .connectToDevice(id: savedId, servicesWithCharacteristicsToDiscover: {})
+            .listen((u) {
+          _update(u.connectionState);
+        }, onError: (_) {
+          _update(DeviceConnectionState.disconnected);
+        });
+        return;
+      }
+    }
+
+    await autoConnectToBest(targetName);
   }
 
   Future<void> autoConnectToBest(String targetName,
@@ -113,6 +152,7 @@ class BleManager {
     _lastRssi.value = best!.rssi;
     _deviceName.value = best!.name;
     _deviceId.value = best!.id;
+    await _prefs?.setString(_savedIdKey, best!.id);
 
     _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
