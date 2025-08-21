@@ -456,12 +456,12 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
               ),
             ),
           ),
-          if (_ble.lastRssi != null)
-            IconButton(
-              onPressed: () => _ble.autoConnectToBest('RGB_CONTROL_L'),
-              icon: const Icon(Icons.sync, color: Colors.white),
-              tooltip: 'Переподключиться',
-            ),
+          IconButton(
+            onPressed: () =>
+                _ble.autoConnectToBest('RGB_CONTROL_L', useCache: false),
+            icon: const Icon(Icons.sync, color: Colors.white),
+            tooltip: 'Переподключиться',
+          ),
         ],
       ),
     );

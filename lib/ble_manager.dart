@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Менеджер BLE: ищет по имени, выбирает лучшую по RSSI и подключается.
 class BleManager {
@@ -11,6 +12,8 @@ class BleManager {
   static final BleManager instance = BleManager._();
 
   final FlutterReactiveBle _ble = FlutterReactiveBle();
+  static const _prefsDeviceIdKey = 'saved_device_id';
+  String? _savedDeviceId;
 
   final ValueNotifier<DeviceConnectionState> _connState =
       ValueNotifier(DeviceConnectionState.disconnected);
@@ -47,6 +50,8 @@ class BleManager {
     if (_initialized) return;
     _initialized = true;
     await _ensurePermissions();
+    final prefs = await SharedPreferences.getInstance();
+    _savedDeviceId = prefs.getString(_prefsDeviceIdKey);
   }
 
   Future<void> _ensurePermissions() async {
@@ -78,8 +83,28 @@ class BleManager {
   }
 
   Future<void> autoConnectToBest(String targetName,
-      {Duration scanDuration = const Duration(seconds: 6)}) async {
+      {Duration scanDuration = const Duration(seconds: 6), bool useCache = true}) async {
+    await ensureInitialized();
     await disconnect();
+
+    if (useCache && _savedDeviceId != null) {
+      _lastRssi.value = null;
+      _deviceName.value = targetName;
+      _deviceId.value = _savedDeviceId;
+
+      _connSub?.cancel();
+      _update(DeviceConnectionState.connecting);
+
+      _connSub = _ble
+          .connectToDevice(id: _savedDeviceId!, servicesWithCharacteristicsToDiscover: {})
+          .listen((u) {
+        _update(u.connectionState);
+      }, onError: (_) async {
+        await autoConnectToBest(targetName,
+            scanDuration: scanDuration, useCache: false);
+      });
+      return;
+    }
 
     _setScanning(true);
     DiscoveredDevice? best;
@@ -159,6 +184,9 @@ class BleManager {
     if (_connState.value != s) {
       _connState.value = s;
       if (!_stateCtrl.isClosed) _stateCtrl.add(s);
+      if (s == DeviceConnectionState.connected && _deviceId.value != null) {
+        unawaited(_saveDeviceId(_deviceId.value!));
+      }
     }
   }
 
@@ -172,5 +200,11 @@ class BleManager {
   void dispose() {
     _stateCtrl.close();
     _scanCtrl.close();
+  }
+
+  Future<void> _saveDeviceId(String id) async {
+    _savedDeviceId = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsDeviceIdKey, id);
   }
 }
