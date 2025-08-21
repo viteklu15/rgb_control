@@ -31,7 +31,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   void initState() {
     super.initState();
     _ble.ensureInitialized();
-    _ble.autoConnectToBest('RGB_CONTROL_L');
+    _ble.connect('RGB_CONTROL_L');
 
     _statusSub = _ble.statusStream.listen((_) {
       if (!mounted) return;
@@ -63,7 +63,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
 
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
-        await _ble.autoConnectToBest('RGB_CONTROL_L');
+        await _ble.connect('RGB_CONTROL_L');
       }
     });
   }
@@ -456,12 +456,13 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
               ),
             ),
           ),
-          if (_ble.lastRssi != null)
-            IconButton(
-              onPressed: () => _ble.autoConnectToBest('RGB_CONTROL_L'),
-              icon: const Icon(Icons.sync, color: Colors.white),
-              tooltip: 'Переподключиться',
-            ),
+          IconButton(
+            onPressed: busy
+                ? null
+                : () => _ble.connect('RGB_CONTROL_L', forceScan: true),
+            icon: const Icon(Icons.sync, color: Colors.white),
+            tooltip: 'Переподключиться',
+          ),
         ],
       ),
     );
