@@ -30,6 +30,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   @override
   void initState() {
     super.initState();
+    _ble.ensureInitialized();
     _ble.connect('RGB_CONTROL_L');
 
     _statusSub = _ble.statusStream.listen((_) {
