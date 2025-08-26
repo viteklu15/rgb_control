@@ -180,8 +180,8 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
               children: [
                 const _ConnectionIndicator(),
                 const SizedBox(height: 8),
-                if (connected) _buildCommandBlock(),
-                if (connected) const SizedBox(height: 8),
+                _buildCommandBlock(connected),
+                const SizedBox(height: 8),
                 Expanded(
                   child: Center(
                     child: Column(
@@ -369,28 +369,31 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     );
   }
 
-  Widget _buildCommandBlock() {
+  Widget _buildCommandBlock(bool connected) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _iconRadio(1, Icons.filter_1),
-                _iconRadio(2, Icons.filter_2),
-                _iconRadio(3, Icons.filter_3),
-              ],
+          child: Opacity(
+            opacity: connected ? 1.0 : 0.5,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _iconRadio(1, Icons.filter_1, connected),
+                  _iconRadio(2, Icons.filter_2, connected),
+                  _iconRadio(3, Icons.filter_3, connected),
+                ],
+              ),
             ),
           ),
         ),
@@ -398,16 +401,17 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     );
   }
 
-  Widget _iconRadio(int value, IconData icon) {
+  Widget _iconRadio(int value, IconData icon, bool enabled) {
     return Expanded(
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white),
+          Icon(icon, color: enabled ? Colors.white : Colors.white38),
           Radio<int>(
             value: value,
             groupValue: _commandNumber,
-            onChanged: _selectCommand,
+            onChanged: enabled ? _selectCommand : null,
             activeColor: const Color(0xFF7FDBFF),
           ),
         ],
