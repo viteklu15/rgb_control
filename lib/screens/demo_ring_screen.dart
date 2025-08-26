@@ -18,6 +18,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   bool _policeMode = false;
   bool _autoColorMode = false;
   int _brightness = 10; // 0..10
+  int _commandNumber = 1;
 
   final _ble = BleManager.instance;
 
@@ -130,6 +131,12 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     if (_ble.isConnected) RgbService.onAutoColor(value);
   }
 
+  void _selectCommand(int? value) {
+    if (value == null) return;
+    setState(() => _commandNumber = value);
+    if (_ble.isConnected) RgbService.onCommandNumber(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.of(context).size.width;
@@ -173,6 +180,8 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
               children: [
                 const _ConnectionIndicator(),
                 const SizedBox(height: 8),
+                if (connected) _buildCommandBlock(),
+                if (connected) const SizedBox(height: 8),
                 Expanded(
                   child: Center(
                     child: Column(
@@ -354,6 +363,52 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommandBlock() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _iconRadio(1, Icons.filter_1),
+                _iconRadio(2, Icons.filter_2),
+                _iconRadio(3, Icons.filter_3),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _iconRadio(int value, IconData icon) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white),
+          Radio<int>(
+            value: value,
+            groupValue: _commandNumber,
+            onChanged: _selectCommand,
+            activeColor: const Color(0xFF7FDBFF),
           ),
         ],
       ),
