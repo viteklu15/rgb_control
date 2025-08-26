@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../services/rgb_service.dart';
 import '../ble_manager.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart'; 
+import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 class DemoRingScreen extends StatefulWidget {
   const DemoRingScreen({super.key});
@@ -27,11 +27,16 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   static const int _reconnectMaxDelaySec = 30;
   StreamSubscription? _statusSub;
 
+  // флаг, чтобы не запускать параллельные подключения
+  bool _connecting = false;
+
   @override
   void initState() {
     super.initState();
     _ble.ensureInitialized();
-    _ble.autoConnectToBest('RGB_CONTROL_L');
+
+    // Первая и единственная «немедленная» попытка
+    _connectOnce();
 
     _statusSub = _ble.statusStream.listen((_) {
       if (!mounted) return;
@@ -54,23 +59,28 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     });
   }
 
+  Future<void> _connectOnce() async {
+    if (_connecting || _ble.isConnected) return;
+    _connecting = true;
+    try {
+      await _ble.autoConnectToBest('RGB_CONTROL_L');
+    } finally {
+      _connecting = false;
+    }
+  }
+
   void _scheduleReconnect() {
-    if (_reconnectTimer?.isActive ?? false) return;
+    // если уже таймер есть, уже подключаемся, или вдруг уже подключены — ничего не делаем
+    if ((_reconnectTimer?.isActive ?? false) || _connecting || _ble.isConnected) return;
 
     final attempt = _reconnectAttempt++;
-    if (attempt == 0) {
-      // Первое переподключение выполняем сразу, чтобы индикатор появился немедленно
-      unawaited(_ble.autoConnectToBest('RGB_CONTROL_L'));
-      return;
-    }
-
-    final exp = ((attempt - 1).clamp(0, 10) as int);
-    final delaySec =
-        min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
+    // ⚠️ убрана мгновенная попытка для attempt==0 — она уже была в initState()
+    final exp = ((attempt).clamp(0, 10) as int);
+    final delaySec = min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
 
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
-        await _ble.autoConnectToBest('RGB_CONTROL_L');
+        unawaited(_connectOnce());
       }
     });
   }
@@ -440,7 +450,7 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
 
     final String label = _ble.isConnected
         ? 'Подключено'
-        : (busy ? 'Подключение…' : 'Поиск устройства');
+        : (busy ? 'Поиск устройства' : ' Не подключено');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -464,10 +474,8 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
             ),
           ),
           IconButton(
-            onPressed:
-                busy ? null : () => _ble.autoConnectToBest('RGB_CONTROL_L'),
-            icon: Icon(Icons.sync,
-                color: busy ? Colors.white54 : Colors.white),
+            onPressed: busy ? null : () => _ble.autoConnectToBest('RGB_CONTROL_L'),
+            icon: Icon(Icons.sync, color: busy ? Colors.white54 : Colors.white),
             tooltip: 'Переподключиться',
           ),
         ],
