@@ -21,32 +21,32 @@ class RgbService {
   }
 
   static Future<void> onPowerToggled(bool isOn, {required Color current}) async {
-    await _sendString("PWR:${isOn ? 1 : 0}\\n");
+    await _sendString("PWR:${isOn ? 1 : 0}\n");
     if (isOn) {
-      await _sendString("RGB:${current.red},${current.green},${current.blue}\\n");
+      await _sendString("RGB:${current.red},${current.green},${current.blue}\n");
     }
   }
 
   static Future<void> onColorChanged(Color c, {required bool isOn}) async {
     if (!isOn) return;
-    await _sendString("RGB:${c.red},${c.green},${c.blue}\\n", withResponse: false);
+    await _sendString("RGB:${c.red},${c.green},${c.blue}\n", withResponse: false);
   }
 
   // НОВОЕ: управление яркостью (0..255)
   static Future<void> onBrightnessChanged(int brightness, {bool withResponse = false}) async {
-    // предполагаемый протокол: "BRI:<0..255>\\n"
-    await _sendString("BRI:$brightness\\n", withResponse: withResponse);
+    // предполагаемый протокол: "BRI:<0..255>\n"
+    await _sendString("BRI:$brightness\n", withResponse: withResponse);
   }
 
   static Future<void> onPoliceMode(bool enabled) async {
-    await _sendString("POL:${enabled ? 1 : 0}\\n");
+    await _sendString("POL:${enabled ? 1 : 0}\n");
   }
 
   static Future<void> onAutoColor(bool enabled) async {
-    await _sendString("AUTO:${enabled ? 1 : 0}\\n");
+    await _sendString("AUTO:${enabled ? 1 : 0}\n");
   }
 
   static Future<void> onCommandNumber(int number) async {
-    await _sendString("$number\\n");
+    await _sendString("LED:$number\n");
   }
 }
