@@ -49,4 +49,12 @@ class RgbService {
   static Future<void> onCommandNumber(int number) async {
     await _sendString("LED:$number\n");
   }
+
+  /// Поток уведомлений от устройства.
+  static Stream<List<int>> statusStream() {
+    return BleManager.instance.subscribeToCharacteristic(
+      service: _svc,
+      characteristic: _ch,
+    );
+  }
 }
