@@ -799,6 +799,22 @@ class _CircleColorPickerState extends State<CircleColorPicker>
     )..addListener(_notify);
   }
 
+  @override
+  void didUpdateWidget(covariant CircleColorPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialColor != widget.initialColor) {
+      final hsl = HSLColor.fromColor(widget.initialColor);
+      _hueDegController.removeListener(_notify);
+      _lightnessController.removeListener(_notify);
+      _hueDegController.value = hsl.hue;
+      _lightnessController.value = hsl.lightness;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _hueDegController.addListener(_notify);
+        _lightnessController.addListener(_notify);
+      });
+    }
+  }
+
   void _notify() => widget.onChanged(_color);
 
   @override
@@ -877,6 +893,14 @@ class _HuePickerState extends State<_HuePicker> with TickerProviderStateMixin {
       upperBound: 1,
       duration: const Duration(milliseconds: 50),
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant _HuePicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialHueDeg != widget.initialHueDeg) {
+      _radiansController.value = widget.initialHueDeg * pi / 180;
+    }
   }
 
   @override
