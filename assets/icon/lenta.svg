@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="96" height="96" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Контур по центру -->
-  <rect x="3" y="8" width="18" height="6" rx="2" ry="2" stroke="#FFFFFF" stroke-width="1.0" fill="none"/>
+  <!-- Увеличенный контур по центру -->
+  <rect x="2.5" y="7" width="19" height="10" rx="2.5" ry="2.5" stroke="#FFFFFF" stroke-width="1.2" fill="none"/>
   
-  <!-- Линии по центру -->
-  <g stroke="#FFFFFF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <line x1="6"  y1="11" x2="10" y2="11"/>
-    <line x1="10" y1="11" x2="14" y2="11"/>
-    <line x1="14" y1="11" x2="18" y2="11"/>
+  <!-- Более толстые линии по центру -->
+  <g stroke="#FFFFFF" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="6"  y1="12" x2="10" y2="12"/>
+    <line x1="10" y1="12" x2="14" y2="12"/>
+    <line x1="14" y1="12" x2="18" y2="12"/>
   </g>
 
-  <!-- Четыре точки -->
+  <!-- Увеличенные точки -->
   <g fill="#FFFFFF">
-    <circle cx="6"  cy="11" r="0.9"/>
-    <circle cx="10" cy="11" r="0.9"/>
-    <circle cx="14" cy="11" r="0.9"/>
-    <circle cx="18" cy="11" r="0.9"/>
+    <circle cx="6"  cy="12" r="1.3"/>
+    <circle cx="10" cy="12" r="1.3"/>
+    <circle cx="14" cy="12" r="1.3"/>
+    <circle cx="18" cy="12" r="1.3"/>
   </g>
 </svg>
