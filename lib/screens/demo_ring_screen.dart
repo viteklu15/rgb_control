@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../services/rgb_service.dart';
@@ -28,6 +29,8 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   int _reconnectAttempt = 0;
   static const int _reconnectMaxDelaySec = 30;
   StreamSubscription? _statusSub;
+  StreamSubscription<List<int>>? _notifySub;
+  String _rxBuffer = '';
 
   // флаг, чтобы не запускать параллельные подключения
   bool _connecting = false;
@@ -55,7 +58,10 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
 
       if (connected) {
         _cancelReconnect();
+        _startNotify();
       } else {
+        _notifySub?.cancel();
+        _notifySub = null;
         _scheduleReconnect();
       }
     });
@@ -93,10 +99,53 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     _reconnectAttempt = 0;
   }
 
+  void _startNotify() {
+    _notifySub?.cancel();
+    _notifySub = RgbService.statusStream().listen(_onStatusData);
+  }
+
+  void _onStatusData(List<int> data) {
+    _rxBuffer += utf8.decode(data, allowMalformed: true);
+    int idx;
+    while ((idx = _rxBuffer.indexOf('%')) != -1) {
+      final packet = _rxBuffer.substring(0, idx);
+      _rxBuffer = _rxBuffer.substring(idx + 1);
+      _applyStatus(packet);
+    }
+  }
+
+  void _applyStatus(String packet) {
+    final parts = packet.split(';');
+    if (parts.length < 8) return;
+    final r = int.tryParse(parts[0]);
+    final g = int.tryParse(parts[1]);
+    final b = int.tryParse(parts[2]);
+    final bright = int.tryParse(parts[3]);
+    final regim = int.tryParse(parts[4]);
+    final power = parts[5] == '1';
+    final pol = parts[6] == '1';
+    final auto = parts[7] == '1';
+    setState(() {
+      if (r != null && g != null && b != null) {
+        _currentColor = Color.fromARGB(255, r, g, b);
+      }
+      if (bright != null) _brightness = bright;
+      if (regim != null) _commandNumber = regim;
+      _isOn = power;
+      _policeMode = pol;
+      _autoColorMode = auto;
+      if (!_isOn) {
+        _policeMode = false;
+        _autoColorMode = false;
+      }
+    });
+  }
+
   @override
   void dispose() {
     _cancelReconnect();
     _statusSub?.cancel();
+    _notifySub?.cancel();
     super.dispose();
   }
 

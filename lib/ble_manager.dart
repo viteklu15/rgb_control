@@ -155,6 +155,25 @@ class BleManager {
     }
   }
 
+  /// Подписка на уведомления от характеристики.
+  /// Возвращает поток байтов или пустой поток,
+  /// если устройство не подключено.
+  Stream<List<int>> subscribeToCharacteristic({
+    required Uuid service,
+    required Uuid characteristic,
+  }) {
+    final id = connectedDeviceId;
+    if (id == null || !isConnected) {
+      return const Stream<List<int>>.empty();
+    }
+    final ch = QualifiedCharacteristic(
+      deviceId: id,
+      serviceId: service,
+      characteristicId: characteristic,
+    );
+    return _ble.subscribeToCharacteristic(ch);
+  }
+
   void _update(DeviceConnectionState s) {
     if (_connState.value != s) {
       _connState.value = s;
