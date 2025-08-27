@@ -16,6 +16,8 @@ class DemoRingScreen extends StatefulWidget {
 
 class _DemoRingScreenState extends State<DemoRingScreen> {
   Color _currentColor = const Color(0xFFFF0000);
+  // Цвет, выбранный пользователем в палитре и используемый при включении
+  Color _selectedColor = const Color(0xFFFF0000);
   bool _isOn = false;
   bool _policeMode = false;
   bool _autoColorMode = false;
@@ -127,7 +129,11 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     final auto = parts[7] == '1';
     setState(() {
       if (r != null && g != null && b != null) {
-        _currentColor = Color.fromARGB(255, r, g, b);
+        final color = Color.fromARGB(255, r, g, b);
+        _currentColor = color;
+        if (power || r != 0 || g != 0 || b != 0) {
+          _selectedColor = color;
+        }
       }
       if (bright != null) _brightness = bright;
       if (regim != null) _commandNumber = regim;
@@ -158,7 +164,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
       }
     });
     if (_ble.isConnected) {
-      await RgbService.onPowerToggled(_isOn, current: _currentColor);
+      await RgbService.onPowerToggled(_isOn, current: _selectedColor);
     }
   }
 
@@ -245,7 +251,10 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                             initialColor: _currentColor,
                             enabled: _isOn && connected,
                             onChanged: (c) {
-                              setState(() => _currentColor = c);
+                              setState(() {
+                                _currentColor = c;
+                                _selectedColor = c;
+                              });
                               if (connected) {
                                 RgbService.onColorChanged(c, isOn: _isOn);
                               }
