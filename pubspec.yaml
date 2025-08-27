@@ -22,6 +22,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1  # Убраны кавычки
+  flutter_svg: ^2.0.9
 
 flutter_icons:
   android: true
@@ -37,3 +38,6 @@ flutter:
   # Рекомендую добавить секцию assets для иконок
   assets:
     - assets/icon/icon.png
+    - assets/icon/lamp.svg
+    - assets/icon/lenta.svg
+    - assets/icon/obh.svg

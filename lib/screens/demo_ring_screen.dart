@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/rgb_service.dart';
 import '../ble_manager.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:flutter_svg/flutter_svg.dart'; // <— добавлено
 
 class DemoRingScreen extends StatefulWidget {
   const DemoRingScreen({super.key});
@@ -71,17 +72,17 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   }
 
   void _scheduleReconnect() {
-    // если уже таймер есть, уже подключаемся, или вдруг уже подключены — ничего не делаем
-    if ((_reconnectTimer?.isActive ?? false) || _connecting || _ble.isConnected) return;
+    if ((_reconnectTimer?.isActive ?? false) || _connecting || _ble.isConnected)
+      return;
 
     final attempt = _reconnectAttempt++;
-    // ⚠️ убрана мгновенная попытка для attempt==0 — она уже была в initState()
     final exp = ((attempt).clamp(0, 10) as int);
     final delaySec = min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
 
     _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
       if (!_ble.isConnected) {
-        unawaited(_connectOnce());
+        // ignore: discarded_futures
+        _connectOnce();
       }
     });
   }
@@ -109,9 +110,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     });
     if (_ble.isConnected) {
       await RgbService.onPowerToggled(_isOn, current: _currentColor);
-      // if (_isOn) {
-      //   await RgbService.onBrightnessChanged(_brightness, withResponse: false);
-      // }
     }
   }
 
@@ -146,7 +144,8 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     final thumbSize = ringSize * 0.1;
 
     final connected = _ble.isConnected;
-    final powerEnabled = connected; // кнопка питания активна только при подключении
+    final powerEnabled =
+        connected; // кнопка питания активна только при подключении
 
     return Scaffold(
       body: Stack(
@@ -206,30 +205,37 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                               duration: const Duration(milliseconds: 200),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                boxShadow: (_isOn && powerEnabled)
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.greenAccent.withOpacity(0.45),
-                                          blurRadius: 32,
-                                          spreadRadius: 2,
-                                        ),
-                                      ]
-                                    : [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.25),
-                                          blurRadius: 10,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
+                                boxShadow:
+                                    (_isOn && powerEnabled)
+                                        ? [
+                                          BoxShadow(
+                                            color: Colors.greenAccent
+                                                .withOpacity(0.45),
+                                            blurRadius: 32,
+                                            spreadRadius: 2,
+                                          ),
+                                        ]
+                                        : [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.25,
+                                            ),
+                                            blurRadius: 10,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
                               ),
                               child: Opacity(
                                 opacity: powerEnabled ? 1.0 : 0.55,
                                 child: RawMaterialButton(
                                   onPressed: powerEnabled ? _togglePower : null,
                                   elevation: 0,
-                                  fillColor: _isOn && powerEnabled
-                                      ? const Color(0xFF11C56B)
-                                      : Colors.white.withOpacity(powerEnabled ? 0.9 : 0.35),
+                                  fillColor:
+                                      _isOn && powerEnabled
+                                          ? const Color(0xFF11C56B)
+                                          : Colors.white.withOpacity(
+                                            powerEnabled ? 0.9 : 0.35,
+                                          ),
                                   shape: const CircleBorder(),
                                   constraints: const BoxConstraints.tightFor(
                                     width: 122,
@@ -238,9 +244,12 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                                   child: Icon(
                                     Icons.power_settings_new_rounded,
                                     size: 44,
-                                    color: _isOn && powerEnabled
-                                        ? Colors.white
-                                        : (powerEnabled ? Colors.grey[700] : Colors.grey[500]),
+                                    color:
+                                        _isOn && powerEnabled
+                                            ? Colors.white
+                                            : (powerEnabled
+                                                ? Colors.grey[700]
+                                                : Colors.grey[500]),
                                   ),
                                 ),
                               ),
@@ -257,57 +266,89 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
                                 child: BackdropFilter(
-                                  filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                  filter: ui.ImageFilter.blur(
+                                    sigmaX: 12,
+                                    sigmaY: 12,
+                                  ),
                                   child: Container(
                                     width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 10,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.white.withOpacity(0.08),
                                       borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.18),
+                                        width: 1,
+                                      ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             Icon(
                                               Icons.wb_sunny_rounded,
                                               size: 18,
-                                              color: (_isOn && connected) ? Colors.white : Colors.white38,
+                                              color:
+                                                  (_isOn && connected)
+                                                      ? Colors.white
+                                                      : Colors.white38,
                                             ),
                                             const SizedBox(width: 8),
                                             Text(
                                               'Яркость: $_brightness',
                                               style: TextStyle(
-                                                color: (_isOn && connected) ? Colors.white : Colors.white38,
+                                                color:
+                                                    (_isOn && connected)
+                                                        ? Colors.white
+                                                        : Colors.white38,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
                                           ],
                                         ),
                                         SliderTheme(
-                                          data: SliderTheme.of(context).copyWith(
-                                            activeTrackColor: Colors.lightBlueAccent,
+                                          data: SliderTheme.of(
+                                            context,
+                                          ).copyWith(
+                                            activeTrackColor:
+                                                Colors.lightBlueAccent,
                                             inactiveTrackColor: Colors.white24,
                                             thumbColor: Colors.lightBlueAccent,
-                                            overlayColor: Colors.lightBlueAccent.withOpacity(0.2),
+                                            overlayColor: Colors.lightBlueAccent
+                                                .withOpacity(0.2),
                                             trackHeight: 6,
-                                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-                                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                                            thumbShape:
+                                                const RoundSliderThumbShape(
+                                                  enabledThumbRadius: 10,
+                                                ),
+                                            overlayShape:
+                                                const RoundSliderOverlayShape(
+                                                  overlayRadius: 16,
+                                                ),
                                           ),
                                           child: Slider(
                                             min: 0,
                                             max: 10,
                                             divisions: 10,
                                             value: _brightness.toDouble(),
-                                            onChanged: (_isOn && connected)
-                                                ? (v) {
-                                                    final b = v.round();
-                                                    setState(() => _brightness = b);
-                                                    RgbService.onBrightnessChanged(b, withResponse: false);
-                                                  }
-                                                : null,
+                                            onChanged:
+                                                (_isOn && connected)
+                                                    ? (v) {
+                                                      final b = v.round();
+                                                      setState(
+                                                        () => _brightness = b,
+                                                      );
+                                                      RgbService.onBrightnessChanged(
+                                                        b,
+                                                        withResponse: false,
+                                                      );
+                                                    }
+                                                    : null,
                                           ),
                                         ),
                                       ],
@@ -327,14 +368,23 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(20),
                             child: BackdropFilter(
-                              filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                              filter: ui.ImageFilter.blur(
+                                sigmaX: 14,
+                                sigmaY: 14,
+                              ),
                               child: Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.white.withOpacity(0.08),
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.18),
+                                    width: 1,
+                                  ),
                                 ),
                                 child: Column(
                                   children: [
@@ -342,14 +392,23 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                                       title: 'Мигалка',
                                       value: _policeMode,
                                       enabled: _isOn && connected,
-                                      onChanged: (_isOn && connected) ? _togglePoliceMode : null,
+                                      onChanged:
+                                          (_isOn && connected)
+                                              ? _togglePoliceMode
+                                              : null,
                                     ),
-                                    const Divider(height: 0, color: Colors.white24),
+                                    const Divider(
+                                      height: 0,
+                                      color: Colors.white24,
+                                    ),
                                     _GlassSwitchTile(
                                       title: 'Автоцвет',
                                       value: _autoColorMode,
                                       enabled: _isOn && connected,
-                                      onChanged: (_isOn && connected) ? _toggleAutoColorMode : null,
+                                      onChanged:
+                                          (_isOn && connected)
+                                              ? _toggleAutoColorMode
+                                              : null,
                                     ),
                                   ],
                                 ),
@@ -384,14 +443,45 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.18),
+                  width: 1,
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _iconRadio(1, Icons.filter_1, connected),
-                  _iconRadio(2, Icons.filter_2, connected),
-                  _iconRadio(3, Icons.filter_3, connected),
+                  // SVG из assets
+                  _iconRadio(
+                    1,
+                    SvgPicture.asset(
+                      "assets/icon/lamp.svg",
+                      width: 24,
+                      height: 24,
+                      color: connected ? Colors.white : Colors.white38,
+                    ),
+                    connected,
+                  ),
+                  _iconRadio(
+                    2,
+                    SvgPicture.asset(
+                      "assets/icon/lenta.svg",
+                      width: 24,
+                      height: 24,
+                      color: connected ? Colors.white : Colors.white38,
+                    ),
+                    connected,
+                  ),
+                  _iconRadio(
+                    3,
+                    SvgPicture.asset(
+                      "assets/icon/obh.svg",
+                      width: 24,
+                      height: 24,
+                      color: connected ? Colors.white : Colors.white38,
+                    ),
+                    connected,
+                  ),
                 ],
               ),
             ),
@@ -401,13 +491,14 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     );
   }
 
-  Widget _iconRadio(int value, IconData icon, bool enabled) {
+  // <<< ИЗМЕНЕНО: теперь принимает Widget, а не IconData >>>
+  Widget _iconRadio(int value, Widget icon, bool enabled) {
     return Expanded(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: enabled ? Colors.white : Colors.white38),
+          icon,
           Radio<int>(
             value: value,
             groupValue: _commandNumber,
@@ -486,7 +577,10 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
             Container(
               width: 10,
               height: 10,
-              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
+              ),
             ),
             SizedBox(
               width: 16,
@@ -507,9 +601,10 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
       );
     }
 
-    final String label = _ble.isConnected
-        ? 'Подключено'
-        : (busy ? 'Поиск устройства' : ' Не подключено');
+    final String label =
+        _ble.isConnected
+            ? 'Подключено'
+            : (busy ? 'Поиск устройства' : ' Не подключено');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -533,7 +628,8 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
             ),
           ),
           IconButton(
-            onPressed: busy ? null : () => _ble.autoConnectToBest('RGB_CONTROL_L'),
+            onPressed:
+                busy ? null : () => _ble.autoConnectToBest('RGB_CONTROL_L'),
             icon: Icon(Icons.sync, color: busy ? Colors.white54 : Colors.white),
             tooltip: 'Переподключиться',
           ),
@@ -621,7 +717,12 @@ class _CircleColorPickerState extends State<CircleColorPicker>
   late final AnimationController _hueDegController;
 
   Color get _color =>
-      HSLColor.fromAHSL(1, _hueDegController.value, 1, _lightnessController.value).toColor();
+      HSLColor.fromAHSL(
+        1,
+        _hueDegController.value,
+        1,
+        _lightnessController.value,
+      ).toColor();
 
   @override
   void initState() {
@@ -665,7 +766,8 @@ class _CircleColorPickerState extends State<CircleColorPicker>
               strokeWidth: widget.strokeWidth,
               thumbSize: widget.thumbSize,
               initialHueDeg: widget.initialHue,
-              onRadiansChanged: (rad) => _hueDegController.value = (rad * 180 / pi) % 360,
+              onRadiansChanged:
+                  (rad) => _hueDegController.value = (rad * 180 / pi) % 360,
               enabled: widget.enabled,
             ),
           ),
@@ -727,7 +829,10 @@ class _HuePickerState extends State<_HuePicker> with TickerProviderStateMixin {
   }
 
   void _updateFromPos(Offset p) {
-    final r = atan2(p.dy - widget.size.height / 2, p.dx - widget.size.width / 2);
+    final r = atan2(
+      p.dy - widget.size.height / 2,
+      p.dx - widget.size.width / 2,
+    );
     _radiansController.value = (r % (2 * pi));
   }
 
@@ -772,7 +877,13 @@ class _HuePickerState extends State<_HuePicker> with TickerProviderStateMixin {
                       scale: _scaleController,
                       child: _Thumb(
                         size: widget.thumbSize,
-                        color: HSLColor.fromAHSL(1, (angle * 180 / pi) % 360, 1, .5).toColor(),
+                        color:
+                            HSLColor.fromAHSL(
+                              1,
+                              (angle * 180 / pi) % 360,
+                              1,
+                              .5,
+                            ).toColor(),
                       ),
                     ),
                   );
@@ -821,7 +932,8 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter old) => old.strokeWidth != strokeWidth;
+  bool shouldRepaint(covariant _RingPainter old) =>
+      old.strokeWidth != strokeWidth;
 }
 
 class _Thumb extends StatelessWidget {
@@ -837,7 +949,9 @@ class _Thumb extends StatelessWidget {
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 6, spreadRadius: 2)],
+        boxShadow: [
+          BoxShadow(color: Color(0x33000000), blurRadius: 6, spreadRadius: 2),
+        ],
       ),
       alignment: Alignment.center,
       child: Container(
