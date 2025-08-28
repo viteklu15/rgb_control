@@ -251,11 +251,27 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                             initialColor: _currentColor,
                             enabled: _isOn && connected,
                             onChanged: (c) {
+                              bool disablePolice = false;
+                              bool disableAuto = false;
                               setState(() {
                                 _currentColor = c;
                                 _selectedColor = c;
+                                if (_policeMode) {
+                                  _policeMode = false;
+                                  disablePolice = true;
+                                }
+                                if (_autoColorMode) {
+                                  _autoColorMode = false;
+                                  disableAuto = true;
+                                }
                               });
                               if (connected) {
+                                if (disablePolice) {
+                                  RgbService.onPoliceMode(false);
+                                }
+                                if (disableAuto) {
+                                  RgbService.onAutoColor(false);
+                                }
                                 RgbService.onColorChanged(c, isOn: _isOn);
                               }
                             },
