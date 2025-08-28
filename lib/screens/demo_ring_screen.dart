@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../services/rgb_service.dart';
@@ -32,7 +31,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   static const int _reconnectMaxDelaySec = 30;
   StreamSubscription? _statusSub;
   StreamSubscription<List<int>>? _notifySub;
-  String _rxBuffer = '';
+  final List<int> _rxBuffer = [];
 
   // флаг, чтобы не запускать параллельные подключения
   bool _connecting = false;
@@ -107,37 +106,33 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
   }
 
   void _onStatusData(List<int> data) {
-    _rxBuffer += utf8.decode(data, allowMalformed: true);
-    int idx;
-    while ((idx = _rxBuffer.indexOf('%')) != -1) {
-      final packet = _rxBuffer.substring(0, idx);
-      _rxBuffer = _rxBuffer.substring(idx + 1);
-      print("BLE Packet: $packet"); // <-- лог перед обработкой пакета
+    _rxBuffer.addAll(data);
+    while (_rxBuffer.length >= 8) {
+      final packet = List<int>.from(_rxBuffer.take(8));
+      _rxBuffer.removeRange(0, 8);
+      print('BLE Packet: $packet');
       _applyStatus(packet);
     }
   }
 
-  void _applyStatus(String packet) {
-    final parts = packet.split(';');
-    if (parts.length < 8) return;
-    final r = int.tryParse(parts[0]);
-    final g = int.tryParse(parts[1]);
-    final b = int.tryParse(parts[2]);
-    final bright = int.tryParse(parts[3]);
-    final regim = int.tryParse(parts[4]);
-    final power = parts[5] == '1';
-    final pol = parts[6] == '1';
-    final auto = parts[7] == '1';
+  void _applyStatus(List<int> packet) {
+    if (packet.length < 8) return;
+    final r = packet[0];
+    final g = packet[1];
+    final b = packet[2];
+    final bright = packet[3];
+    final regim = packet[4];
+    final power = packet[5] != 0;
+    final pol = packet[6] != 0;
+    final auto = packet[7] != 0;
     setState(() {
-      if (r != null && g != null && b != null) {
-        final color = Color.fromARGB(255, r, g, b);
-        _currentColor = color;
-        if (power || r != 0 || g != 0 || b != 0) {
-          _selectedColor = color;
-        }
+      final color = Color.fromARGB(255, r, g, b);
+      _currentColor = color;
+      if (power || r != 0 || g != 0 || b != 0) {
+        _selectedColor = color;
       }
-      if (bright != null) _brightness = bright;
-      if (regim != null) _commandNumber = regim;
+      _brightness = bright;
+      _commandNumber = regim;
       _isOn = power;
       _policeMode = pol;
       _autoColorMode = auto;
