@@ -112,6 +112,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     while ((idx = _rxBuffer.indexOf('%')) != -1) {
       final packet = _rxBuffer.substring(0, idx);
       _rxBuffer = _rxBuffer.substring(idx + 1);
+      print("BLE Packet: $packet"); // <-- лог перед обработкой пакета
       _applyStatus(packet);
     }
   }
