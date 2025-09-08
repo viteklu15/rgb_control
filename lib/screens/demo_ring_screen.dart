@@ -698,8 +698,10 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
             ),
           ),
           IconButton(
-            onPressed:
-                busy ? null : () => _ble.autoConnectToBest('RGB_CONTROL_L'),
+            onPressed: busy
+                ? null
+                : () =>
+                    _ble.autoConnectToBest('RGB_CONTROL_L', forceScan: true),
             icon: Icon(Icons.sync, color: busy ? Colors.white54 : Colors.white),
             tooltip: 'Переподключиться',
           ),

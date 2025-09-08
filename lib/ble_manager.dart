@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Менеджер BLE: ищет по имени, выбирает лучшую по RSSI и подключается.
 class BleManager {
@@ -77,9 +78,36 @@ class BleManager {
     }
   }
 
+  static const _prefsDeviceKey = 'last_device_mac';
+
   Future<void> autoConnectToBest(String targetName,
-      {Duration scanDuration = const Duration(seconds: 6)}) async {
+      {Duration scanDuration = const Duration(seconds: 6),
+      bool forceScan = false}) async {
     await disconnect();
+
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!forceScan) {
+      final savedId = prefs.getString(_prefsDeviceKey);
+      if (savedId != null) {
+        _lastRssi.value = null;
+        _deviceId.value = savedId;
+        _deviceName.value = null;
+
+        _connSub?.cancel();
+        _update(DeviceConnectionState.connecting);
+
+        _connSub = _ble
+            .connectToDevice(
+                id: savedId, servicesWithCharacteristicsToDiscover: {})
+            .listen((u) {
+          _update(u.connectionState);
+        }, onError: (_) {
+          _update(DeviceConnectionState.disconnected);
+        });
+        return;
+      }
+    }
 
     _setScanning(true);
     DiscoveredDevice? best;
@@ -104,8 +132,6 @@ class BleManager {
 
     if (best == null) {
       _lastRssi.value = null;
-      _deviceId.value = null;
-      _deviceName.value = null;
       _update(DeviceConnectionState.disconnected);
       return;
     }
@@ -113,6 +139,7 @@ class BleManager {
     _lastRssi.value = best!.rssi;
     _deviceName.value = best!.name;
     _deviceId.value = best!.id;
+    await prefs.setString(_prefsDeviceKey, best!.id);
 
     _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
