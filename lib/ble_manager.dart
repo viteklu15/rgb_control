@@ -86,7 +86,7 @@ class BleManager {
     _deviceId.value = id;
     _deviceName.value = null;
 
-    _connSub?.cancel();
+    await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     final completer = Completer<DeviceConnectionState>();
@@ -133,7 +133,7 @@ class BleManager {
 
     _setScanning(true);
     DiscoveredDevice? best;
-    _scanSub?.cancel();
+    await _scanSub?.cancel();
     _scanSub = _ble
         .scanForDevices(
           withServices: const [],
@@ -163,7 +163,7 @@ class BleManager {
     _deviceId.value = best!.id;
     await prefs.setString(_prefsDeviceKey, best!.id);
 
-    _connSub?.cancel();
+    await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     _connSub = _ble
