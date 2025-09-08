@@ -80,6 +80,41 @@ class BleManager {
 
   static const _prefsDeviceKey = 'last_device_mac';
 
+  Future<bool> _connectToSaved(String id,
+      {Duration timeout = const Duration(seconds: 4)}) async {
+    _lastRssi.value = null;
+    _deviceId.value = id;
+    _deviceName.value = null;
+
+    _connSub?.cancel();
+    _update(DeviceConnectionState.connecting);
+
+    final completer = Completer<DeviceConnectionState>();
+    _connSub = _ble
+        .connectToDevice(id: id, servicesWithCharacteristicsToDiscover: {})
+        .listen((u) {
+      _update(u.connectionState);
+      if (!completer.isCompleted &&
+          (u.connectionState == DeviceConnectionState.connected ||
+              u.connectionState == DeviceConnectionState.disconnected)) {
+        completer.complete(u.connectionState);
+      }
+    }, onError: (_) {
+      _update(DeviceConnectionState.disconnected);
+      if (!completer.isCompleted) {
+        completer.complete(DeviceConnectionState.disconnected);
+      }
+    });
+
+    final state = await completer.future.timeout(timeout, onTimeout: () {
+      _connSub?.cancel();
+      _update(DeviceConnectionState.disconnected);
+      return DeviceConnectionState.disconnected;
+    });
+
+    return state == DeviceConnectionState.connected;
+  }
+
   Future<void> autoConnectToBest(String targetName,
       {Duration scanDuration = const Duration(seconds: 6),
       bool forceScan = false}) async {
@@ -90,22 +125,9 @@ class BleManager {
     if (!forceScan) {
       final savedId = prefs.getString(_prefsDeviceKey);
       if (savedId != null) {
-        _lastRssi.value = null;
-        _deviceId.value = savedId;
-        _deviceName.value = null;
-
-        _connSub?.cancel();
-        _update(DeviceConnectionState.connecting);
-
-        _connSub = _ble
-            .connectToDevice(
-                id: savedId, servicesWithCharacteristicsToDiscover: {})
-            .listen((u) {
-          _update(u.connectionState);
-        }, onError: (_) {
-          _update(DeviceConnectionState.disconnected);
-        });
-        return;
+        final connected = await _connectToSaved(savedId);
+        if (connected) return;
+        await prefs.remove(_prefsDeviceKey);
       }
     }
 
