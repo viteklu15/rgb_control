@@ -127,7 +127,6 @@ class BleManager {
       if (savedId != null) {
         final connected = await _connectToSaved(savedId);
         if (connected) return;
-        await prefs.remove(_prefsDeviceKey);
       }
     }
 
@@ -160,16 +159,19 @@ class BleManager {
 
     _lastRssi.value = best!.rssi;
     _deviceName.value = best!.name;
-    _deviceId.value = best!.id;
-    await prefs.setString(_prefsDeviceKey, best!.id);
+    final newId = best!.id;
 
     await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     _connSub = _ble
-        .connectToDevice(id: best!.id, servicesWithCharacteristicsToDiscover: {})
+        .connectToDevice(id: newId, servicesWithCharacteristicsToDiscover: {})
         .listen((u) {
       _update(u.connectionState);
+      if (u.connectionState == DeviceConnectionState.connected) {
+        _deviceId.value = newId;
+        unawaited(prefs.setString(_prefsDeviceKey, newId));
+      }
     }, onError: (_) {
       _update(DeviceConnectionState.disconnected);
     });
