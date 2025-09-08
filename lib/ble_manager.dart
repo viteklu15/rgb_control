@@ -186,6 +186,15 @@ class BleManager {
     _update(DeviceConnectionState.disconnected);
   }
 
+  /// Forget previously saved device identifier so that the next
+  /// connection attempt will scan for a new device.
+  Future<void> forgetDevice() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsDeviceKey);
+    _deviceId.value = null;
+    _deviceName.value = null;
+  }
+
   Future<void> writeBytes({
     required Uuid service,
     required Uuid characteristic,
