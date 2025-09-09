@@ -165,16 +165,37 @@ class BleManager {
     await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
+    final completer = Completer<DeviceConnectionState>();
     _connSub = _ble
         .connectToDevice(id: best!.id, servicesWithCharacteristicsToDiscover: {})
         .listen((u) {
       _update(u.connectionState);
+      if (!completer.isCompleted &&
+          (u.connectionState == DeviceConnectionState.connected ||
+              u.connectionState == DeviceConnectionState.disconnected)) {
+        completer.complete(u.connectionState);
+      }
       if (u.connectionState == DeviceConnectionState.connected) {
         unawaited(prefs.setString(_prefsDeviceKey, best!.id));
       }
     }, onError: (_) {
       _update(DeviceConnectionState.disconnected);
+      if (!completer.isCompleted) {
+        completer.complete(DeviceConnectionState.disconnected);
+      }
     });
+
+    final state = await completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        _connSub?.cancel();
+        _update(DeviceConnectionState.disconnected);
+        return DeviceConnectionState.disconnected;
+      },
+    );
+    if (state != DeviceConnectionState.connected) {
+      await _connSub?.cancel();
+    }
   }
 
   Future<void> disconnect() async {
