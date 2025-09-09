@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Менеджер BLE: ищет по имени, выбирает лучшую по RSSI и подключается.
 class BleManager {
@@ -78,62 +77,13 @@ class BleManager {
     }
   }
 
-  static const _prefsDeviceKey = 'last_device_mac';
-
-  Future<bool> _connectToSaved(String id,
-      {Duration timeout = const Duration(seconds: 5)}) async {
-    _lastRssi.value = null;
-    _deviceId.value = id;
-    _deviceName.value = null;
-
-    await _connSub?.cancel();
-    _update(DeviceConnectionState.connecting);
-
-    final completer = Completer<DeviceConnectionState>();
-    _connSub = _ble
-        .connectToDevice(id: id, servicesWithCharacteristicsToDiscover: {})
-        .listen((u) {
-      _update(u.connectionState);
-      if (!completer.isCompleted &&
-          (u.connectionState == DeviceConnectionState.connected ||
-              u.connectionState == DeviceConnectionState.disconnected)) {
-        completer.complete(u.connectionState);
-      }
-    }, onError: (_) {
-      _update(DeviceConnectionState.disconnected);
-      if (!completer.isCompleted) {
-        completer.complete(DeviceConnectionState.disconnected);
-      }
-    });
-
-    final state = await completer.future.timeout(timeout, onTimeout: () {
-      _connSub?.cancel();
-      _update(DeviceConnectionState.disconnected);
-      return DeviceConnectionState.disconnected;
-    });
-
-    return state == DeviceConnectionState.connected;
-  }
-
   Future<void> autoConnectToBest(String targetName,
-      {Duration scanDuration = const Duration(seconds: 15),
-      bool forceScan = false}) async {
+      {Duration scanDuration = const Duration(seconds: 6)}) async {
     await disconnect();
-
-    final prefs = await SharedPreferences.getInstance();
-
-    if (!forceScan) {
-      final savedId = prefs.getString(_prefsDeviceKey);
-      if (savedId != null) {
-        final connected =
-            await _connectToSaved(savedId, timeout: const Duration(seconds: 5));
-        if (connected) return;
-      }
-    }
 
     _setScanning(true);
     DiscoveredDevice? best;
-    await _scanSub?.cancel();
+    _scanSub?.cancel();
     _scanSub = _ble
         .scanForDevices(
           withServices: const [],
@@ -154,6 +104,8 @@ class BleManager {
 
     if (best == null) {
       _lastRssi.value = null;
+      _deviceId.value = null;
+      _deviceName.value = null;
       _update(DeviceConnectionState.disconnected);
       return;
     }
@@ -162,40 +114,16 @@ class BleManager {
     _deviceName.value = best!.name;
     _deviceId.value = best!.id;
 
-    await _connSub?.cancel();
+    _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
-    final completer = Completer<DeviceConnectionState>();
     _connSub = _ble
         .connectToDevice(id: best!.id, servicesWithCharacteristicsToDiscover: {})
         .listen((u) {
       _update(u.connectionState);
-      if (!completer.isCompleted &&
-          (u.connectionState == DeviceConnectionState.connected ||
-              u.connectionState == DeviceConnectionState.disconnected)) {
-        completer.complete(u.connectionState);
-      }
-      if (u.connectionState == DeviceConnectionState.connected) {
-        unawaited(prefs.setString(_prefsDeviceKey, best!.id));
-      }
     }, onError: (_) {
       _update(DeviceConnectionState.disconnected);
-      if (!completer.isCompleted) {
-        completer.complete(DeviceConnectionState.disconnected);
-      }
     });
-
-    final state = await completer.future.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        _connSub?.cancel();
-        _update(DeviceConnectionState.disconnected);
-        return DeviceConnectionState.disconnected;
-      },
-    );
-    if (state != DeviceConnectionState.connected) {
-      await _connSub?.cancel();
-    }
   }
 
   Future<void> disconnect() async {
