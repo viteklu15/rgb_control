@@ -4,13 +4,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Менеджер BLE: ищет по имени, выбирает лучшую по RSSI и подключается.
+/// ИЗМЕНЕНО: Добавлена логика принудительного сканирования.
 class BleManager {
   BleManager._();
   static final BleManager instance = BleManager._();
 
   final FlutterReactiveBle _ble = FlutterReactiveBle();
+
+  static const String _storageKey = "last_known_mac_address";
 
   final ValueNotifier<DeviceConnectionState> _connState =
       ValueNotifier(DeviceConnectionState.disconnected);
@@ -20,8 +24,7 @@ class BleManager {
 
   final StreamController<DeviceConnectionState> _stateCtrl =
       StreamController<DeviceConnectionState>.broadcast();
-  final StreamController<bool> _scanCtrl =
-      StreamController<bool>.broadcast();
+  final StreamController<bool> _scanCtrl = StreamController<bool>.broadcast();
   bool _scanning = false;
 
   Stream<DeviceConnectionState> get statusStream => _stateCtrl.stream;
@@ -42,11 +45,130 @@ class BleManager {
   StreamSubscription<DiscoveredDevice>? _scanSub;
   StreamSubscription<ConnectionStateUpdate>? _connSub;
   bool _initialized = false;
+  bool _isConnecting = false;
 
   Future<void> ensureInitialized() async {
     if (_initialized) return;
     _initialized = true;
     await _ensurePermissions();
+  }
+
+  /// Главный метод подключения с новой логикой
+  /// <--- ИЗМЕНЕНО: Добавлен параметр forceScan --->
+  Future<void> connect({
+    String targetName = "RGB_CONTROL_L",
+    bool forceScan = false,
+  }) async {
+    if (_isConnecting || isConnected) return;
+    _isConnecting = true;
+
+    await disconnect();
+
+    final lastMac = await _getLastMacAddress();
+
+    // <--- ИЗМЕНЕНО: Проверяем флаг forceScan --->
+    if (lastMac != null && !forceScan) {
+      print('Attempting to connect to saved MAC: $lastMac');
+      _update(DeviceConnectionState.connecting);
+      _connSub = _ble.connectToDevice(
+        id: lastMac,
+        connectionTimeout: const Duration(seconds: 5),
+      ).listen(
+        (update) => _handleConnectionUpdate(update, onConnected: () {
+          print('Successfully connected to saved MAC: $lastMac');
+        }),
+        onError: (e) {
+          print('Failed to connect by MAC, starting scan...');
+          _scanAndConnect(targetName);
+        },
+      );
+    } else {
+      if (forceScan) {
+        print('Forcing scan by user request...');
+      } else {
+        print('No saved MAC address, starting scan...');
+      }
+      _scanAndConnect(targetName);
+    }
+
+    Future.delayed(const Duration(seconds: 1)).then((_) {
+       if (_connState.value != DeviceConnectionState.connecting) {
+         _isConnecting = false;
+       }
+    });
+  }
+
+  void _scanAndConnect(String targetName) async {
+    _setScanning(true);
+    DiscoveredDevice? bestDevice;
+    final scanTimer = Timer(const Duration(seconds: 15), () {
+        _scanSub?.cancel();
+        _scanSub = null;
+        if (bestDevice == null) {
+          print('Scan finished. No devices found.');
+          _setScanning(false);
+          _update(DeviceConnectionState.disconnected);
+           _isConnecting = false;
+        } else {
+          print('Scan finished. Best device found: ${bestDevice?.name} (${bestDevice?.id})');
+          _setScanning(false);
+          _update(DeviceConnectionState.connecting);
+          _connSub = _ble.connectToDevice(id: bestDevice!.id).listen(
+            (update) => _handleConnectionUpdate(update, onConnected: () {
+              print('Successfully connected to scanned device: ${update.deviceId}');
+              // <--- ВАЖНО: MAC-адрес меняется только после успешного подключения по имени --->
+              _saveMacAddress(update.deviceId);
+            }),
+            onError: (_) => _isConnecting = false,
+          );
+        }
+    });
+
+
+    _scanSub = _ble.scanForDevices(withServices: []).listen((device) {
+      if (device.name == targetName) {
+        if (bestDevice == null || device.rssi > bestDevice!.rssi) {
+          bestDevice = device;
+        }
+      }
+    }, onError: (_) {
+      _isConnecting = false;
+      _setScanning(false);
+    });
+  }
+
+  void _handleConnectionUpdate(ConnectionStateUpdate update, {VoidCallback? onConnected}) {
+    _update(update.connectionState);
+    if (update.connectionState == DeviceConnectionState.connected) {
+      _deviceId.value = update.deviceId;
+      _isConnecting = false;
+      onConnected?.call();
+    } else if(update.connectionState == DeviceConnectionState.disconnected){
+       _isConnecting = false;
+    }
+  }
+
+  Future<void> disconnect() async {
+    await _scanSub?.cancel();
+    await _connSub?.cancel();
+    _scanSub = null;
+    _connSub = null;
+    _setScanning(false);
+    if(connectionState != DeviceConnectionState.disconnected){
+      _update(DeviceConnectionState.disconnected);
+    }
+    _isConnecting = false;
+  }
+
+  Future<String?> _getLastMacAddress() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_storageKey);
+  }
+
+  Future<void> _saveMacAddress(String mac) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_storageKey, mac);
+    print('Saved new MAC address: $mac');
   }
 
   Future<void> _ensurePermissions() async {
@@ -59,7 +181,6 @@ class BleManager {
           Permission.bluetoothScan,
           Permission.bluetoothConnect,
         ].request();
-        // Optional: если нужен advertise, добавьте Permission.bluetoothAdvertise
         if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
             statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
           throw Exception('Нет разрешений на BLE (scan/connect)');
@@ -71,68 +192,8 @@ class BleManager {
         }
       }
     } else if (Platform.isIOS) {
-      // На iOS системный диалог появляется при первом обращении к CoreBluetooth.
-      // Явный запрос не обязателен, но можно проверить статус:
       await Permission.bluetooth.request();
     }
-  }
-
-  Future<void> autoConnectToBest(String targetName,
-      {Duration scanDuration = const Duration(seconds: 6)}) async {
-    await disconnect();
-
-    _setScanning(true);
-    DiscoveredDevice? best;
-    _scanSub?.cancel();
-    _scanSub = _ble
-        .scanForDevices(
-          withServices: const [],
-          scanMode: ScanMode.balanced,
-          requireLocationServicesEnabled: false,
-        )
-        .listen((d) {
-      if (d.name == targetName) {
-        if (best == null || d.rssi > best!.rssi) best = d;
-      }
-    }, onError: (_) {
-      _update(DeviceConnectionState.disconnected);
-    });
-
-    await Future.delayed(scanDuration);
-    await _scanSub?.cancel();
-    _setScanning(false);
-
-    if (best == null) {
-      _lastRssi.value = null;
-      _deviceId.value = null;
-      _deviceName.value = null;
-      _update(DeviceConnectionState.disconnected);
-      return;
-    }
-
-    _lastRssi.value = best!.rssi;
-    _deviceName.value = best!.name;
-    _deviceId.value = best!.id;
-
-    _connSub?.cancel();
-    _update(DeviceConnectionState.connecting);
-
-    _connSub = _ble
-        .connectToDevice(id: best!.id, servicesWithCharacteristicsToDiscover: {})
-        .listen((u) {
-      _update(u.connectionState);
-    }, onError: (_) {
-      _update(DeviceConnectionState.disconnected);
-    });
-  }
-
-  Future<void> disconnect() async {
-    await _scanSub?.cancel();
-    await _connSub?.cancel();
-    _scanSub = null;
-    _connSub = null;
-    _setScanning(false);
-    _update(DeviceConnectionState.disconnected);
   }
 
   Future<void> writeBytes({
@@ -155,9 +216,6 @@ class BleManager {
     }
   }
 
-  /// Подписка на уведомления от характеристики.
-  /// Возвращает поток байтов или пустой поток,
-  /// если устройство не подключено.
   Stream<List<int>> subscribeToCharacteristic({
     required Uuid service,
     required Uuid characteristic,
