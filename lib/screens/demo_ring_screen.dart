@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/rgb_service.dart';
 import '../ble_manager.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
-import 'package:flutter_svg/flutter_svg.dart'; // <— добавлено
+import 'package:flutter_svg/flutter_svg.dart';
 
 class DemoRingScreen extends StatefulWidget {
   const DemoRingScreen({super.key});
@@ -15,42 +15,35 @@ class DemoRingScreen extends StatefulWidget {
 
 class _DemoRingScreenState extends State<DemoRingScreen> {
   Color _currentColor = const Color(0xFFFF0000);
-  // Цвет, выбранный пользователем в палитре и используемый при включении
   Color _selectedColor = const Color(0xFFFF0000);
   bool _isOn = false;
   bool _policeMode = false;
   bool _autoColorMode = false;
-  int _brightness = 10; // 0..10
+  int _brightness = 10;
   int _commandNumber = 1;
 
   final _ble = BleManager.instance;
 
-  // ---- автопереподключение ----
-  Timer? _reconnectTimer;
-  int _reconnectAttempt = 0;
-  static const int _reconnectMaxDelaySec = 30;
+  // ---- УПРОЩЕНО: убрана логика автоматического переподключения ----
   StreamSubscription? _statusSub;
   StreamSubscription<List<int>>? _notifySub;
   final List<int> _rxBuffer = [];
 
-  // флаг, чтобы не запускать параллельные подключения
-  bool _connecting = false;
-
   @override
   void initState() {
     super.initState();
-    _ble.ensureInitialized();
+    // Инициализируем и запускаем новый процесс подключения
+    _ble.ensureInitialized().then((_) {
+      _ble.connect();
+    });
 
-    // Первая и единственная «немедленная» попытка
-    _connectOnce();
-
-    _statusSub = _ble.statusStream.listen((_) {
+    _statusSub = _ble.statusStream.listen((status) {
       if (!mounted) return;
-      final connected = _ble.isConnected;
+      final connected = (status == DeviceConnectionState.connected);
 
       setState(() {
         if (!connected) {
-          // При разрыве связи локально выключаем питание и режимы
+          // При разрыве связи сбрасываем состояние
           _isOn = false;
           _policeMode = false;
           _autoColorMode = false;
@@ -58,46 +51,12 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
       });
 
       if (connected) {
-        _cancelReconnect();
-        _startNotify();
+        _startNotify(); // Подписываемся на уведомления при подключении
       } else {
         _notifySub?.cancel();
         _notifySub = null;
-        _scheduleReconnect();
       }
     });
-  }
-
-  Future<void> _connectOnce() async {
-    if (_connecting || _ble.isConnected) return;
-    _connecting = true;
-    try {
-      await _ble.autoConnectToBest('RGB_CONTROL_L');
-    } finally {
-      _connecting = false;
-    }
-  }
-
-  void _scheduleReconnect() {
-    if ((_reconnectTimer?.isActive ?? false) || _connecting || _ble.isConnected)
-      return;
-
-    final attempt = _reconnectAttempt++;
-    final exp = ((attempt).clamp(0, 10) as int);
-    final delaySec = min(_reconnectMaxDelaySec, 1 << exp); // 1,2,4,8,16,30...
-
-    _reconnectTimer = Timer(Duration(seconds: delaySec), () async {
-      if (!_ble.isConnected) {
-        // ignore: discarded_futures
-        _connectOnce();
-      }
-    });
-  }
-
-  void _cancelReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
-    _reconnectAttempt = 0;
   }
 
   void _startNotify() {
@@ -145,11 +104,12 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
 
   @override
   void dispose() {
-    _cancelReconnect();
     _statusSub?.cancel();
     _notifySub?.cancel();
     super.dispose();
   }
+
+  // --- Методы отправки команд остались без изменений ---
 
   void _togglePower() async {
     setState(() {
@@ -186,6 +146,11 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     if (_ble.isConnected) RgbService.onCommandNumber(value);
   }
 
+  // --- Build метод и виджеты остались без изменений, кроме индикатора ---
+  // ... (весь остальной код вашего класса _DemoRingScreenState без изменений)
+  // ... (включая build, _buildCommandBlock, _iconRadio, _blurSpot)
+  // Я приложу полный код класса ниже для ясности.
+
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.of(context).size.width;
@@ -195,13 +160,11 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     final thumbSize = ringSize * 0.1;
 
     final connected = _ble.isConnected;
-    final powerEnabled =
-        connected; // кнопка питания активна только при подключении
+    final powerEnabled = connected;
 
     return Scaffold(
       body: Stack(
         children: [
-          // Фон
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -228,7 +191,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
           SafeArea(
             child: Column(
               children: [
-                const _ConnectionIndicator(),
+                const _ConnectionIndicator(), // Этот виджет теперь использует новую логику
                 const SizedBox(height: 8),
                 _buildCommandBlock(connected),
                 const SizedBox(height: 8),
@@ -237,7 +200,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Кольцевой цветовой пикер + кнопка питания
                         Transform.translate(
                           offset: Offset(0, -h * 0.04),
                           child: CircleColorPicker(
@@ -275,37 +237,35 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                               duration: const Duration(milliseconds: 200),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                boxShadow:
-                                    (_isOn && powerEnabled)
-                                        ? [
-                                          BoxShadow(
-                                            color: Colors.greenAccent
-                                                .withOpacity(0.45),
-                                            blurRadius: 32,
-                                            spreadRadius: 2,
+                                boxShadow: (_isOn && powerEnabled)
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.greenAccent
+                                              .withOpacity(0.45),
+                                          blurRadius: 32,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(
+                                            0.25,
                                           ),
-                                        ]
-                                        : [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.25,
-                                            ),
-                                            blurRadius: 10,
-                                            spreadRadius: 1,
-                                          ),
-                                        ],
+                                          blurRadius: 10,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
                               ),
                               child: Opacity(
                                 opacity: powerEnabled ? 1.0 : 0.55,
                                 child: RawMaterialButton(
                                   onPressed: powerEnabled ? _togglePower : null,
                                   elevation: 0,
-                                  fillColor:
-                                      _isOn && powerEnabled
-                                          ? const Color(0xFF11C56B)
-                                          : Colors.white.withOpacity(
-                                            powerEnabled ? 0.9 : 0.35,
-                                          ),
+                                  fillColor: _isOn && powerEnabled
+                                      ? const Color(0xFF11C56B)
+                                      : Colors.white.withOpacity(
+                                          powerEnabled ? 0.9 : 0.35,
+                                        ),
                                   shape: const CircleBorder(),
                                   constraints: const BoxConstraints.tightFor(
                                     width: 122,
@@ -314,20 +274,17 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                                   child: Icon(
                                     Icons.power_settings_new_rounded,
                                     size: 44,
-                                    color:
-                                        _isOn && powerEnabled
-                                            ? Colors.white
-                                            : (powerEnabled
-                                                ? Colors.grey[700]
-                                                : Colors.grey[500]),
+                                    color: _isOn && powerEnabled
+                                        ? Colors.white
+                                        : (powerEnabled
+                                            ? Colors.grey[700]
+                                            : Colors.grey[500]),
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-
-                        // Слайдер яркости
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Column(
@@ -363,62 +320,60 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                                             Icon(
                                               Icons.wb_sunny_rounded,
                                               size: 18,
-                                              color:
-                                                  (_isOn && connected)
-                                                      ? Colors.white
-                                                      : Colors.white38,
+                                              color: (_isOn && connected)
+                                                  ? Colors.white
+                                                  : Colors.white38,
                                             ),
                                             const SizedBox(width: 8),
                                             Text(
                                               'Яркость: $_brightness',
                                               style: TextStyle(
-                                                color:
-                                                    (_isOn && connected)
-                                                        ? Colors.white
-                                                        : Colors.white38,
+                                                color: (_isOn && connected)
+                                                    ? Colors.white
+                                                    : Colors.white38,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
                                           ],
                                         ),
                                         SliderTheme(
-                                          data: SliderTheme.of(
-                                            context,
-                                          ).copyWith(
+                                          data:
+                                              SliderTheme.of(context).copyWith(
                                             activeTrackColor:
                                                 Colors.lightBlueAccent,
                                             inactiveTrackColor: Colors.white24,
                                             thumbColor: Colors.lightBlueAccent,
-                                            overlayColor: Colors.lightBlueAccent
+                                            overlayColor: Colors
+                                                .lightBlueAccent
                                                 .withOpacity(0.2),
                                             trackHeight: 6,
                                             thumbShape:
                                                 const RoundSliderThumbShape(
-                                                  enabledThumbRadius: 10,
-                                                ),
+                                              enabledThumbRadius: 10,
+                                            ),
                                             overlayShape:
                                                 const RoundSliderOverlayShape(
-                                                  overlayRadius: 16,
-                                                ),
+                                              overlayRadius: 16,
+                                            ),
                                           ),
                                           child: Slider(
                                             min: 0,
                                             max: 10,
                                             divisions: 10,
                                             value: _brightness.toDouble(),
-                                            onChanged:
-                                                (_isOn && connected)
-                                                    ? (v) {
-                                                      final b = v.round();
-                                                      setState(
-                                                        () => _brightness = b,
-                                                      );
-                                                      RgbService.onBrightnessChanged(
-                                                        b,
-                                                        withResponse: false,
-                                                      );
-                                                    }
-                                                    : null,
+                                            onChanged: (_isOn && connected)
+                                                ? (v) {
+                                                    final b = v.round();
+                                                    setState(
+                                                      () => _brightness = b,
+                                                    );
+                                                    RgbService
+                                                        .onBrightnessChanged(
+                                                      b,
+                                                      withResponse: false,
+                                                    );
+                                                  }
+                                                : null,
                                           ),
                                         ),
                                       ],
@@ -429,10 +384,7 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 22),
-
-                        // Плитка режимов
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: ClipRRect(
@@ -462,10 +414,9 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                                       title: 'Мигалка',
                                       value: _policeMode,
                                       enabled: _isOn && connected,
-                                      onChanged:
-                                          (_isOn && connected)
-                                              ? _togglePoliceMode
-                                              : null,
+                                      onChanged: (_isOn && connected)
+                                          ? _togglePoliceMode
+                                          : null,
                                     ),
                                     const Divider(
                                       height: 0,
@@ -475,10 +426,9 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
                                       title: 'Автоцвет',
                                       value: _autoColorMode,
                                       enabled: _isOn && connected,
-                                      onChanged:
-                                          (_isOn && connected)
-                                              ? _toggleAutoColorMode
-                                              : null,
+                                      onChanged: (_isOn && connected)
+                                          ? _toggleAutoColorMode
+                                          : null,
                                     ),
                                   ],
                                 ),
@@ -521,7 +471,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // SVG из assets
                   _iconRadio(
                     1,
                     SvgPicture.asset(
@@ -561,7 +510,6 @@ class _DemoRingScreenState extends State<DemoRingScreen> {
     );
   }
 
-  // <<< ИЗМЕНЕНО: теперь принимает Widget, а не IconData >>>
   Widget _iconRadio(int value, Widget icon, bool enabled) {
     return Expanded(
       child: Row(
@@ -671,10 +619,9 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
       );
     }
 
-    final String label =
-        _ble.isConnected
-            ? 'Подключено'
-            : (busy ? 'Поиск устройства' : ' Не подключено');
+    final String label = _ble.isConnected
+        ? 'Подключено'
+        : (busy ? 'Поиск устройства' : 'Не подключено');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -697,11 +644,11 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
               ),
             ),
           ),
-          IconButton(
-            onPressed:
-                busy ? null : () => _ble.autoConnectToBest('RGB_CONTROL_L'),
+       IconButton(
+            // <--- ИЗМЕНЕНО: кнопка теперь вызывает принудительный поиск --->
+            onPressed: busy ? null : () => _ble.connect(forceScan: true),
             icon: Icon(Icons.sync, color: busy ? Colors.white54 : Colors.white),
-            tooltip: 'Переподключиться',
+            tooltip: 'Начать поиск нового устройства',
           ),
         ],
       ),
@@ -709,6 +656,9 @@ class _ConnectionIndicatorState extends State<_ConnectionIndicator> {
   }
 }
 
+// --- Остальные виджеты (_GlassSwitchTile, CircleColorPicker, etc.) без изменений ---
+// ... (вставьте сюда без изменений классы: _GlassSwitchTile, CircleColorPicker, _CircleColorPickerState, _HuePicker, _HuePickerState, _RingPainter, _Thumb)
+// Я приложу их ниже для полноты.
 class _GlassSwitchTile extends StatelessWidget {
   final String title;
   final bool value;
@@ -747,7 +697,6 @@ class _GlassSwitchTile extends StatelessWidget {
   }
 }
 
-// ------------------- Кольцевой пикер -------------------
 typedef ColorCodeBuilder = Widget Function(BuildContext context, Color color);
 
 class CircleColorPicker extends StatefulWidget {
@@ -786,8 +735,7 @@ class _CircleColorPickerState extends State<CircleColorPicker>
   late final AnimationController _lightnessController;
   late final AnimationController _hueDegController;
 
-  Color get _color =>
-      HSLColor.fromAHSL(
+  Color get _color => HSLColor.fromAHSL(
         1,
         _hueDegController.value,
         1,
@@ -971,13 +919,12 @@ class _HuePickerState extends State<_HuePicker> with TickerProviderStateMixin {
                       scale: _scaleController,
                       child: _Thumb(
                         size: widget.thumbSize,
-                        color:
-                            HSLColor.fromAHSL(
-                              1,
-                              (angle * 180 / pi) % 360,
-                              1,
-                              .5,
-                            ).toColor(),
+                        color: HSLColor.fromAHSL(
+                          1,
+                          (angle * 180 / pi) % 360,
+                          1,
+                          .5,
+                        ).toColor(),
                       ),
                     ),
                   );
