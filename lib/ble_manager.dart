@@ -81,7 +81,7 @@ class BleManager {
   static const _prefsDeviceKey = 'last_device_mac';
 
   Future<bool> _connectToSaved(String id,
-      {Duration timeout = const Duration(seconds: 4)}) async {
+      {Duration timeout = const Duration(seconds: 5)}) async {
     _lastRssi.value = null;
     _deviceId.value = id;
     _deviceName.value = null;
@@ -116,7 +116,7 @@ class BleManager {
   }
 
   Future<void> autoConnectToBest(String targetName,
-      {Duration scanDuration = const Duration(seconds: 6),
+      {Duration scanDuration = const Duration(seconds: 15),
       bool forceScan = false}) async {
     await disconnect();
 
@@ -125,9 +125,9 @@ class BleManager {
     if (!forceScan) {
       final savedId = prefs.getString(_prefsDeviceKey);
       if (savedId != null) {
-        final connected = await _connectToSaved(savedId);
+        final connected =
+            await _connectToSaved(savedId, timeout: const Duration(seconds: 5));
         if (connected) return;
-        await prefs.remove(_prefsDeviceKey);
       }
     }
 
@@ -161,7 +161,6 @@ class BleManager {
     _lastRssi.value = best!.rssi;
     _deviceName.value = best!.name;
     _deviceId.value = best!.id;
-    await prefs.setString(_prefsDeviceKey, best!.id);
 
     await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
@@ -170,6 +169,9 @@ class BleManager {
         .connectToDevice(id: best!.id, servicesWithCharacteristicsToDiscover: {})
         .listen((u) {
       _update(u.connectionState);
+      if (u.connectionState == DeviceConnectionState.connected) {
+        unawaited(prefs.setString(_prefsDeviceKey, best!.id));
+      }
     }, onError: (_) {
       _update(DeviceConnectionState.disconnected);
     });
