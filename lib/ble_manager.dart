@@ -127,6 +127,7 @@ class BleManager {
       if (savedId != null) {
         final connected = await _connectToSaved(savedId);
         if (connected) return;
+        await prefs.remove(_prefsDeviceKey);
       }
     }
 
@@ -159,19 +160,16 @@ class BleManager {
 
     _lastRssi.value = best!.rssi;
     _deviceName.value = best!.name;
-    final newId = best!.id;
+    _deviceId.value = best!.id;
+    await prefs.setString(_prefsDeviceKey, best!.id);
 
     await _connSub?.cancel();
     _update(DeviceConnectionState.connecting);
 
     _connSub = _ble
-        .connectToDevice(id: newId, servicesWithCharacteristicsToDiscover: {})
+        .connectToDevice(id: best!.id, servicesWithCharacteristicsToDiscover: {})
         .listen((u) {
       _update(u.connectionState);
-      if (u.connectionState == DeviceConnectionState.connected) {
-        _deviceId.value = newId;
-        unawaited(prefs.setString(_prefsDeviceKey, newId));
-      }
     }, onError: (_) {
       _update(DeviceConnectionState.disconnected);
     });
@@ -184,15 +182,6 @@ class BleManager {
     _connSub = null;
     _setScanning(false);
     _update(DeviceConnectionState.disconnected);
-  }
-
-  /// Forget previously saved device identifier so that the next
-  /// connection attempt will scan for a new device.
-  Future<void> forgetDevice() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefsDeviceKey);
-    _deviceId.value = null;
-    _deviceName.value = null;
   }
 
   Future<void> writeBytes({
